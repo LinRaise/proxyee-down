@@ -1,14 +1,12 @@
 package lee.study.down.content;
 
-import io.netty.handler.codec.http.HttpRequest;
 import java.io.IOException;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import lee.study.down.boot.AbstractHttpDownBootstrap;
-import lee.study.down.boot.HttpDownBootstrapFactory;
+import lee.study.down.boot.HttpDownBootstrap;
 import lee.study.down.constant.HttpDownConstant;
 import lee.study.down.constant.HttpDownStatus;
 import lee.study.down.model.HttpDownInfo;
@@ -28,7 +26,7 @@ public class DownContent {
   private final static Logger LOGGER = LoggerFactory.getLogger(DownContent.class);
 
   //下载对象管理
-  private static Map<String, AbstractHttpDownBootstrap> downContent;
+  private static Map<String, HttpDownBootstrap> downContent;
 
   public HttpDownInfo getDownInfo(String id) {
     if (downContent.containsKey(id)) {
@@ -125,7 +123,7 @@ public class DownContent {
     return ret;
   }
 
-  public void putBoot(AbstractHttpDownBootstrap bootstrap) {
+  public void putBoot(HttpDownBootstrap bootstrap) {
     synchronized (downContent) {
       if (bootstrap.getHttpDownInfo().getTaskInfo().getStatus() == HttpDownStatus.WAIT) {
         TaskInfo taskInfo = getWaitTask();
@@ -138,11 +136,12 @@ public class DownContent {
   }
 
   public void putBoot(HttpDownInfo httpDownInfo) {
-    AbstractHttpDownBootstrap bootstrap = HttpDownBootstrapFactory.create(httpDownInfo,
-        ContentManager.CONFIG.get().getRetryCount(),
-        HttpDownConstant.clientSslContext,
-        HttpDownConstant.clientLoopGroup,
-        HttpDownConstant.httpDownCallback);
+    HttpDownBootstrap bootstrap = HttpDownBootstrap.builder().httpDownInfo(httpDownInfo)
+        .retryCount(ContentManager.CONFIG.get().getRetryCount())
+        .clientSslContext(HttpDownConstant.clientSslContext)
+        .clientLoopGroup(HttpDownConstant.clientLoopGroup)
+        .callback(HttpDownConstant.httpDownCallback)
+        .build();
     TaskInfo taskInfo = bootstrap.getHttpDownInfo().getTaskInfo();
     if (taskInfo.isSupportRange()) {
       taskInfo.setConnections(ContentManager.CONFIG.get().getConnections());
@@ -155,7 +154,7 @@ public class DownContent {
     downContent.remove(id);
   }
 
-  public static AbstractHttpDownBootstrap getBoot(String id) {
+  public static HttpDownBootstrap getBoot(String id) {
     return downContent.get(id);
   }
 
@@ -200,11 +199,12 @@ public class DownContent {
         List<HttpDownInfo> records = (List<HttpDownInfo>) ByteUtil
             .deserialize(HttpDownConstant.TASK_RECORD_PATH);
         for (HttpDownInfo httpDownInfo : records) {
-          AbstractHttpDownBootstrap bootstrap = HttpDownBootstrapFactory.create(httpDownInfo,
-              ContentManager.CONFIG.get().getRetryCount(),
-              HttpDownConstant.clientSslContext,
-              HttpDownConstant.clientLoopGroup,
-              HttpDownConstant.httpDownCallback);
+          HttpDownBootstrap bootstrap = HttpDownBootstrap.builder().httpDownInfo(httpDownInfo)
+              .retryCount(ContentManager.CONFIG.get().getRetryCount())
+              .clientSslContext(HttpDownConstant.clientSslContext)
+              .clientLoopGroup(HttpDownConstant.clientLoopGroup)
+              .callback(HttpDownConstant.httpDownCallback)
+              .build();
           TaskInfo taskInfo = httpDownInfo.getTaskInfo();
           if (taskInfo.getStatus() == HttpDownStatus.WAIT) {
             continue;

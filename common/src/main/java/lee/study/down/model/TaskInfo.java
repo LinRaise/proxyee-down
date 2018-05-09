@@ -28,6 +28,7 @@ public class TaskInfo implements Serializable {
   private long pauseTime = 0;
   private int status;
   private List<ChunkInfo> chunkInfoList;
+  private List<ConnectInfo> connectInfoList;
 
   public String buildTaskFilePath() {
     return getFilePath() + File.separator + getFileName();
@@ -43,10 +44,12 @@ public class TaskInfo implements Serializable {
 
   public TaskInfo buildChunkInfoList() {
     List<ChunkInfo> chunkInfoList = new ArrayList<>();
+    List<ConnectInfo> connectInfoList = new ArrayList<>();
     if (getTotalSize() > 0) {  //非chunked编码
       //计算chunk列表
       for (int i = 0; i < getConnections(); i++) {
         ChunkInfo chunkInfo = new ChunkInfo();
+        ConnectInfo connectInfo = new ConnectInfo();
         chunkInfo.setIndex(i);
         long chunkSize = getTotalSize() / getConnections();
         chunkInfo.setOriStartPosition(i * chunkSize);
@@ -55,17 +58,25 @@ public class TaskInfo implements Serializable {
           chunkSize += getTotalSize() % getConnections();
         }
         chunkInfo.setEndPosition(chunkInfo.getOriStartPosition() + chunkSize - 1);
+        connectInfo.setChunkIndex(i);
+        connectInfo.setStartPosition(i * chunkSize);
+        connectInfo.setEndPosition(chunkInfo.getOriStartPosition() + chunkSize - 1);
         chunkInfo.setTotalSize(chunkSize);
         chunkInfoList.add(chunkInfo);
+        connectInfoList.add(connectInfo);
       }
     } else { //chunked下载
       ChunkInfo chunkInfo = new ChunkInfo();
+      ConnectInfo connectInfo = new ConnectInfo();
+      connectInfo.setChunkIndex(0);
       chunkInfo.setIndex(0);
       chunkInfo.setNowStartPosition(0);
       chunkInfo.setOriStartPosition(0);
       chunkInfoList.add(chunkInfo);
+      connectInfoList.add(connectInfo);
     }
     setChunkInfoList(chunkInfoList);
+    setConnectInfoList(connectInfoList);
     return this;
   }
 

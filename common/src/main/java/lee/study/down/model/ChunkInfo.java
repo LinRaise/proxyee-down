@@ -23,4 +23,5 @@ public class ChunkInfo implements Serializable {
   private int status = 0;
   private int errorCount = 0;
   private long lastDownTime = 0;
+
 }

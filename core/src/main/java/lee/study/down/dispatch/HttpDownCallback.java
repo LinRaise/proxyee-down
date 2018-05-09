@@ -8,12 +8,6 @@ public class HttpDownCallback {
   public void onStart(HttpDownInfo httpDownInfo) throws Exception {
   }
 
-  public void onChunkConnecting(HttpDownInfo httpDownInfo, ChunkInfo chunkInfo) throws Exception {
-  }
-
-  public void onChunkConnected(HttpDownInfo httpDownInfo, ChunkInfo chunkInfo) throws Exception {
-  }
-
   public void onProgress(HttpDownInfo httpDownInfo, ChunkInfo chunkInfo) throws Exception {
   }
 
@@ -31,9 +25,6 @@ public class HttpDownCallback {
   }
 
   public void onChunkDone(HttpDownInfo httpDownInfo, ChunkInfo chunkInfo) throws Exception {
-  }
-
-  public void onMerge(HttpDownInfo httpDownInfo) throws Exception {
   }
 
   public void onDone(HttpDownInfo httpDownInfo) throws Exception {

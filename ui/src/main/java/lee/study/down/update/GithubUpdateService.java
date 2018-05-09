@@ -1,8 +1,7 @@
 package lee.study.down.update;
 
 import java.util.Collections;
-import lee.study.down.boot.AbstractHttpDownBootstrap;
-import lee.study.down.boot.HttpDownBootstrapFactory;
+import lee.study.down.boot.HttpDownBootstrap;
 import lee.study.down.constant.HttpDownConstant;
 import lee.study.down.dispatch.HttpDownCallback;
 import lee.study.down.model.HttpDownInfo;
@@ -49,7 +48,7 @@ public class GithubUpdateService implements UpdateService {
   }
 
   @Override
-  public AbstractHttpDownBootstrap update(UpdateInfo updateInfo, HttpDownCallback callback)
+  public HttpDownBootstrap update(UpdateInfo updateInfo, HttpDownCallback callback)
       throws Exception {
     HttpRequestInfo requestInfo = HttpDownUtil.buildGetRequest(updateInfo.getUrl());
     TaskInfo taskInfo = HttpDownUtil
@@ -60,8 +59,11 @@ public class GithubUpdateService implements UpdateService {
         .setFilePath(
             HttpDownConstant.HOME_PATH.substring(0, HttpDownConstant.HOME_PATH.length() - 1));
     HttpDownInfo httpDownInfo = new HttpDownInfo(taskInfo, requestInfo, null);
-    AbstractHttpDownBootstrap bootstrap = HttpDownBootstrapFactory.create(httpDownInfo, 5,
-        HttpDownConstant.clientSslContext, HttpDownConstant.clientLoopGroup, callback);
+    HttpDownBootstrap bootstrap = HttpDownBootstrap.builder().httpDownInfo(httpDownInfo)
+        .clientSslContext(HttpDownConstant.clientSslContext)
+        .clientLoopGroup(clientLoopGroup)
+        .callback(callback)
+        .build();
     FileUtil.deleteIfExists(bootstrap.getHttpDownInfo().getTaskInfo().buildTaskFilePath());
     bootstrap.startDown();
     return bootstrap;

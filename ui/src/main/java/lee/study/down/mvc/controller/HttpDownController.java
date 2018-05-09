@@ -14,7 +14,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
-import lee.study.down.boot.AbstractHttpDownBootstrap;
+import lee.study.down.boot.HttpDownBootstrap;
+import lee.study.down.boot.HttpDownBootstrap;
 import lee.study.down.constant.HttpDownConstant;
 import lee.study.down.constant.HttpDownStatus;
 import lee.study.down.content.ContentManager;
@@ -148,7 +149,7 @@ public class HttpDownController {
   @RequestMapping("/pauseTask")
   public ResultInfo pauseTask(@RequestParam String id) throws Exception {
     ResultInfo resultInfo = new ResultInfo();
-    AbstractHttpDownBootstrap bootstrap = ContentManager.DOWN.getBoot(id);
+    HttpDownBootstrap bootstrap = ContentManager.DOWN.getBoot(id);
     if (bootstrap == null) {
       resultInfo.setStatus(ResultStatus.BAD.getCode()).setMsg("任务不存在");
     } else {
@@ -162,7 +163,7 @@ public class HttpDownController {
     ResultInfo resultInfo = new ResultInfo();
     if (taskIds != null && taskIds.size() > 0) {
       for (String taskId : taskIds) {
-        AbstractHttpDownBootstrap bootstrap = ContentManager.DOWN.getBoot(taskId);
+        HttpDownBootstrap bootstrap = ContentManager.DOWN.getBoot(taskId);
         if (bootstrap != null) {
           bootstrap.pauseDown();
         }
@@ -174,7 +175,7 @@ public class HttpDownController {
   @RequestMapping("/continueTask")
   public ResultInfo continueTask(@RequestParam String id) throws Exception {
     ResultInfo resultInfo = new ResultInfo();
-    AbstractHttpDownBootstrap bootstrap = ContentManager.DOWN.getBoot(id);
+    HttpDownBootstrap bootstrap = ContentManager.DOWN.getBoot(id);
     if (bootstrap == null) {
       resultInfo.setStatus(ResultStatus.BAD.getCode()).setMsg("任务不存在");
     } else {
@@ -188,7 +189,7 @@ public class HttpDownController {
     ResultInfo resultInfo = new ResultInfo();
     if (taskIds != null && taskIds.size() > 0) {
       for (String taskId : taskIds) {
-        AbstractHttpDownBootstrap bootstrap = ContentManager.DOWN.getBoot(taskId);
+        HttpDownBootstrap bootstrap = ContentManager.DOWN.getBoot(taskId);
         if (bootstrap != null) {
           bootstrap.continueDown();
         }
@@ -201,7 +202,7 @@ public class HttpDownController {
   public ResultInfo deleteTask(@RequestParam String id, @RequestParam boolean delFile)
       throws Exception {
     ResultInfo resultInfo = new ResultInfo();
-    AbstractHttpDownBootstrap bootstrap = ContentManager.DOWN.getBoot(id);
+    HttpDownBootstrap bootstrap = ContentManager.DOWN.getBoot(id);
     if (bootstrap == null) {
       resultInfo.setStatus(ResultStatus.BAD.getCode()).setMsg("任务不存在");
     } else {
@@ -216,7 +217,7 @@ public class HttpDownController {
     ResultInfo resultInfo = new ResultInfo();
     if (taskIds != null && taskIds.size() > 0) {
       for (String taskId : taskIds) {
-        AbstractHttpDownBootstrap bootstrap = ContentManager.DOWN.getBoot(taskId);
+        HttpDownBootstrap bootstrap = ContentManager.DOWN.getBoot(taskId);
         if (bootstrap != null) {
           bootstrap.delete(delFile);
         }
@@ -360,7 +361,7 @@ public class HttpDownController {
     return resultInfo;
   }
 
-  public static volatile AbstractHttpDownBootstrap updateBootstrap;
+  public static volatile HttpDownBootstrap updateBootstrap;
   private static volatile UpdateInfo updateInfo;
   private static final UpdateService updateService = new GithubUpdateService();
 
@@ -514,11 +515,11 @@ public class HttpDownController {
 
   public static ResultInfo commonStartTask(NewTaskForm taskForm) throws Exception {
     ResultInfo resultInfo = new ResultInfo();
-    AbstractHttpDownBootstrap bootstrap = ContentManager.DOWN.getBoot(taskForm.getId());
+    HttpDownBootstrap bootstrap = ContentManager.DOWN.getBoot(taskForm.getId());
     HttpDownInfo httpDownInfo = bootstrap.getHttpDownInfo();
     //覆盖下载
     if (!StringUtils.isEmpty(taskForm.getOldId())) {
-      AbstractHttpDownBootstrap oldBootstrap = ContentManager.DOWN.getBoot(taskForm.getOldId());
+      HttpDownBootstrap oldBootstrap = ContentManager.DOWN.getBoot(taskForm.getOldId());
       if (oldBootstrap == null) {
         resultInfo.setStatus(ResultStatus.BAD.getCode()).setMsg("任务不存在");
         return resultInfo;

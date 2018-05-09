@@ -25,12 +25,6 @@ public class HttpDownProgressEventTask extends Thread {
               && taskInfo.getStatus() != HttpDownStatus.FAIL
               && taskInfo.getStatus() != HttpDownStatus.PAUSE) {
             taskInfo.setLastTime(System.currentTimeMillis());
-            for (ChunkInfo chunkInfo : taskInfo.getChunkInfoList()) {
-              if (chunkInfo.getStatus() != HttpDownStatus.DONE
-                  && chunkInfo.getStatus() != HttpDownStatus.PAUSE) {
-                chunkInfo.setLastTime(System.currentTimeMillis());
-              }
-            }
             //保存任务进度记录
             synchronized (taskInfo) {
               if (taskInfo.getStatus() != HttpDownStatus.DONE) {
