@@ -78,7 +78,7 @@ public class HttpDownBootstrap {
       throw new BootstrapException("文件名已存在，请修改文件名");
     }
     //创建文件
-    FileUtil.createSparseFile(taskInfo.getFilePath(), taskInfo.getTotalSize());
+    FileUtil.createSparseFile(taskInfo.buildTaskFilePath(), taskInfo.getTotalSize());
     //文件下载开始回调
     taskInfo.reset();
     taskInfo.setStatus(HttpDownStatus.RUNNING);
@@ -113,6 +113,7 @@ public class HttpDownBootstrap {
     connectInfo.setLastActionTime(System.currentTimeMillis());
     cf.addListener((ChannelFutureListener) future -> {
       if (future.isSuccess()) {
+        LOGGER.debug("连接成功：" + connectInfo);
         if (httpDownInfo.getTaskInfo().isSupportRange()) {
           requestInfo.headers().set(HttpHeaderNames.RANGE, "bytes=" + connectInfo.getStartPosition() + "-" + connectInfo.getEndPosition());
         } else {
@@ -137,23 +138,21 @@ public class HttpDownBootstrap {
   public void reConnect(ConnectInfo connectInfo)
       throws Exception {
     TaskInfo taskInfo = httpDownInfo.getTaskInfo();
-    ChunkInfo chunkInfo = httpDownInfo.getTaskInfo().getChunkInfoList().get(connectInfo.getChunkIndex());
     if (taskInfo.isSupportRange()) {
       connectInfo.setStartPosition(connectInfo.getStartPosition() + connectInfo.getDownSize());
     }
-    if (chunkInfo.getErrorCount() < retryCount) {
+    if (connectInfo.getErrorCount() < retryCount) {
       connect(connectInfo);
     } else {
-      if (taskInfo.getChunkInfoList().stream()
-          .filter((chunk) -> chunk.getStatus() != HttpDownStatus.DONE)
-          .allMatch((chunk) -> chunk.getErrorCount() >= retryCount)) {
+      if (taskInfo.getConnectInfoList().stream()
+          .filter(connect -> connect.getStatus() != HttpDownStatus.DONE)
+          .allMatch(connect -> connect.getErrorCount() >= retryCount)) {
         taskInfo.setStatus(HttpDownStatus.FAIL);
         if (callback != null) {
           callback.onError(httpDownInfo, null);
         }
       }
     }
-
   }
 
   /**
@@ -229,7 +228,9 @@ public class HttpDownBootstrap {
         close(connectInfo);
       }
     }
-    clientLoopGroup.shutdownGracefully();
+    if (clientLoopGroup != null) {
+      clientLoopGroup.shutdownGracefully();
+    }
   }
 
   public void close(ConnectInfo connectInfo) {

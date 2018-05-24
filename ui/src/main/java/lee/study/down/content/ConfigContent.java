@@ -24,7 +24,7 @@ public class ConfigContent {
   public void set(ConfigInfo configInfo) {
     configContent = configInfo;
     //设置超时检测时间
-    TimeoutCheckTask.setTimeout(configInfo.getTimeout());
+    TimeoutCheckTask.getInstance().setTimeout(configInfo.getTimeout());
   }
 
   public ConfigInfo get() {

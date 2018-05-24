@@ -11,12 +11,14 @@ import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.codec.http.LastHttpContent;
 import io.netty.handler.ssl.SslContextBuilder;
 import io.netty.handler.ssl.util.InsecureTrustManagerFactory;
+import io.netty.handler.timeout.ReadTimeoutHandler;
 import io.netty.util.ReferenceCountUtil;
 import java.io.IOException;
 import java.nio.channels.SeekableByteChannel;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
+import java.util.concurrent.TimeUnit;
 import lee.study.down.boot.HttpDownBootstrap;
 import lee.study.down.constant.HttpDownStatus;
 import lee.study.down.dispatch.HttpDownCallback;
@@ -33,6 +35,7 @@ import org.slf4j.LoggerFactory;
 public class HttpDownInitializer extends ChannelInitializer {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(HttpDownInitializer.class);
+  private static final long SIZE_1MB = 1 << 20;
 
   private boolean isSsl;
   private HttpDownBootstrap bootstrap;
@@ -43,6 +46,10 @@ public class HttpDownInitializer extends ChannelInitializer {
     this.isSsl = isSsl;
     this.bootstrap = bootstrap;
     this.connectInfo = connectInfo;
+  }
+
+  public static void main(String[] args) {
+    System.out.println(101L / 2);
   }
 
   @Override
@@ -59,6 +66,7 @@ public class HttpDownInitializer extends ChannelInitializer {
               requestProto.getHost(),
               requestProto.getPort()));
     }
+    ch.pipeline().addLast(new ReadTimeoutHandler(30, TimeUnit.SECONDS));
     ch.pipeline().addLast("httpCodec", new HttpClientCodec());
     ch.pipeline().addLast(new ChannelInboundHandlerAdapter() {
 
@@ -84,7 +92,33 @@ public class HttpDownInitializer extends ChannelInitializer {
             connectInfo.setDownSize(connectInfo.getDownSize() + size);
             //下载完成
             if (connectInfo.getDownSize() >= connectInfo.getTotalSize()) {
+              bootstrap.close(connectInfo);
               //判断是否要去支持其他分段
+              ChunkInfo supportChunk = taskInfo.getChunkInfoList()
+                  .stream()
+                  .filter(chunk -> chunk.getIndex() != connectInfo.getChunkIndex()
+                      && chunk.getStatus() != HttpDownStatus.DONE
+                      && chunk.getTotalSize() - chunk.getDownSize() >= SIZE_1MB)
+                  .findFirst()
+                  .get();
+              if (supportChunk != null) {
+                ConnectInfo maxConnect = taskInfo.getConnectInfoList()
+                    .stream()
+                    .filter(connect -> connect.getChunkIndex() == supportChunk.getIndex())
+                    .max((c1, c2) -> (int) (c1.getStartPosition() - c2.getStartPosition()))
+                    .get();
+                //把这个分段最后一个下载连接分成两个
+                long remainingSize = maxConnect.getTotalSize() - maxConnect.getDownSize();
+                long splitSize = remainingSize / 2;
+                maxConnect.setEndPosition(maxConnect.getStartPosition() + splitSize - 1);
+                //给当前连接重新分配下载区间
+                connectInfo.setStartPosition(maxConnect.getEndPosition() + 1);
+                connectInfo.setEndPosition(connectInfo.getStartPosition() + (remainingSize - splitSize) - 1);
+                connectInfo.setChunkIndex(supportChunk.getIndex());
+                connectInfo.setDownSize(0);
+                bootstrap.reConnect(connectInfo);
+                return;
+              }
             }
             if (chunkInfo.getDownSize() == chunkInfo.getTotalSize()
                 || (!taskInfo.isSupportRange() && msg instanceof LastHttpContent)) {
@@ -137,7 +171,7 @@ public class HttpDownInitializer extends ChannelInitializer {
       @Override
       public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
         LOGGER.error("down onChunkError:", cause);
-        chunkInfo.setErrorCount(chunkInfo.getErrorCount() + 1);
+        connectInfo.setErrorCount(connectInfo.getErrorCount() + 1);
         safeClose(ctx.channel());
         if (callback != null) {
           callback.onChunkError(bootstrap.getHttpDownInfo(), chunkInfo, cause);

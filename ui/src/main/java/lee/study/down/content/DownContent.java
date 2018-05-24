@@ -138,8 +138,6 @@ public class DownContent {
   public void putBoot(HttpDownInfo httpDownInfo) {
     HttpDownBootstrap bootstrap = HttpDownBootstrap.builder().httpDownInfo(httpDownInfo)
         .retryCount(ContentManager.CONFIG.get().getRetryCount())
-        .clientSslContext(HttpDownConstant.clientSslContext)
-        .clientLoopGroup(HttpDownConstant.clientLoopGroup)
         .callback(HttpDownConstant.httpDownCallback)
         .build();
     TaskInfo taskInfo = bootstrap.getHttpDownInfo().getTaskInfo();
@@ -201,8 +199,6 @@ public class DownContent {
         for (HttpDownInfo httpDownInfo : records) {
           HttpDownBootstrap bootstrap = HttpDownBootstrap.builder().httpDownInfo(httpDownInfo)
               .retryCount(ContentManager.CONFIG.get().getRetryCount())
-              .clientSslContext(HttpDownConstant.clientSslContext)
-              .clientLoopGroup(HttpDownConstant.clientLoopGroup)
               .callback(HttpDownConstant.httpDownCallback)
               .build();
           TaskInfo taskInfo = httpDownInfo.getTaskInfo();

@@ -60,8 +60,6 @@ public class GithubUpdateService implements UpdateService {
             HttpDownConstant.HOME_PATH.substring(0, HttpDownConstant.HOME_PATH.length() - 1));
     HttpDownInfo httpDownInfo = new HttpDownInfo(taskInfo, requestInfo, null);
     HttpDownBootstrap bootstrap = HttpDownBootstrap.builder().httpDownInfo(httpDownInfo)
-        .clientSslContext(HttpDownConstant.clientSslContext)
-        .clientLoopGroup(clientLoopGroup)
         .callback(callback)
         .build();
     FileUtil.deleteIfExists(bootstrap.getHttpDownInfo().getTaskInfo().buildTaskFilePath());
