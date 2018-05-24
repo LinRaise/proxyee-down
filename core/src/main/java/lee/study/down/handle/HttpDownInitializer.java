@@ -11,14 +11,12 @@ import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.codec.http.LastHttpContent;
 import io.netty.handler.ssl.SslContextBuilder;
 import io.netty.handler.ssl.util.InsecureTrustManagerFactory;
-import io.netty.handler.timeout.ReadTimeoutHandler;
 import io.netty.util.ReferenceCountUtil;
 import java.io.IOException;
 import java.nio.channels.SeekableByteChannel;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
-import java.util.concurrent.TimeUnit;
 import lee.study.down.boot.HttpDownBootstrap;
 import lee.study.down.constant.HttpDownStatus;
 import lee.study.down.dispatch.HttpDownCallback;
@@ -66,7 +64,7 @@ public class HttpDownInitializer extends ChannelInitializer {
               requestProto.getHost(),
               requestProto.getPort()));
     }
-    ch.pipeline().addLast(new ReadTimeoutHandler(30, TimeUnit.SECONDS));
+//    ch.pipeline().addLast(new ReadTimeoutHandler(30, TimeUnit.SECONDS));
     ch.pipeline().addLast("httpCodec", new HttpClientCodec());
     ch.pipeline().addLast(new ChannelInboundHandlerAdapter() {
 
@@ -92,6 +90,7 @@ public class HttpDownInitializer extends ChannelInitializer {
             connectInfo.setDownSize(connectInfo.getDownSize() + size);
             //下载完成
             if (connectInfo.getDownSize() >= connectInfo.getTotalSize()) {
+              System.out.println("连接下载完成："+connectInfo.toString());
               bootstrap.close(connectInfo);
               //判断是否要去支持其他分段
               ChunkInfo supportChunk = taskInfo.getChunkInfoList()
@@ -100,7 +99,7 @@ public class HttpDownInitializer extends ChannelInitializer {
                       && chunk.getStatus() != HttpDownStatus.DONE
                       && chunk.getTotalSize() - chunk.getDownSize() >= SIZE_1MB)
                   .findFirst()
-                  .get();
+                  .orElse(null);
               if (supportChunk != null) {
                 ConnectInfo maxConnect = taskInfo.getConnectInfoList()
                     .stream()
@@ -110,7 +109,7 @@ public class HttpDownInitializer extends ChannelInitializer {
                 //把这个分段最后一个下载连接分成两个
                 long remainingSize = maxConnect.getTotalSize() - maxConnect.getDownSize();
                 long splitSize = remainingSize / 2;
-                maxConnect.setEndPosition(maxConnect.getStartPosition() + splitSize - 1);
+                maxConnect.setEndPosition(maxConnect.getEndPosition() - splitSize);
                 //给当前连接重新分配下载区间
                 connectInfo.setStartPosition(maxConnect.getEndPosition() + 1);
                 connectInfo.setEndPosition(connectInfo.getStartPosition() + (remainingSize - splitSize) - 1);
@@ -159,6 +158,7 @@ public class HttpDownInitializer extends ChannelInitializer {
             realContentSize = HttpDownUtil.getDownContentSize(httpResponse.headers());
             LOGGER.debug("下载响应：channelId[" + ctx.channel().id() + "]\t contentSize[" + realContentSize + "]" + connectInfo);
             fileChannel = Files.newByteChannel(Paths.get(taskInfo.buildTaskFilePath()), StandardOpenOption.WRITE);
+            connectInfo.setFileChannel(fileChannel);
             isSucc = true;
           }
         } catch (Exception e) {

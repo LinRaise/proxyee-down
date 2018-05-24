@@ -567,7 +567,6 @@
 
   .file-detail-popper {
     padding: 10px;
-    width: 60%;
     word-break: break-all;
     color: #ffffff;
     font-size: 12px;

@@ -111,6 +111,7 @@ public class HttpDownBootstrap {
     ChannelFuture cf = bootstrap.connect(requestProto.getHost(), requestProto.getPort());
     //重置最后下载时间
     connectInfo.setLastActionTime(System.currentTimeMillis());
+    connectInfo.setConnectChannel(cf.channel());
     cf.addListener((ChannelFutureListener) future -> {
       if (future.isSuccess()) {
         LOGGER.debug("连接成功：" + connectInfo);
