@@ -497,7 +497,6 @@ public class HttpDownController {
           .getTaskInfo(requestInfo,
               null,
               ContentManager.CONFIG.get().getSecProxyConfig(),
-              HttpDownConstant.clientSslContext,
               HttpDownConstant.clientLoopGroup);
       HttpDownInfo httpDownInfo = new HttpDownInfo(taskInfo, requestInfo,
           ContentManager.CONFIG.get().getSecProxyConfig());
@@ -529,13 +528,6 @@ public class HttpDownController {
         //修改request
         oldBootstrap.getHttpDownInfo().setRequest(httpDownInfo.getRequest());
         oldBootstrap.getHttpDownInfo().setProxyConfig(httpDownInfo.getProxyConfig());
-        Map<String, Object> attr = oldBootstrap.getHttpDownInfo().getAttrs();
-        if (attr == null) {
-          attr = new HashMap<>();
-          oldBootstrap.getHttpDownInfo().setAttrs(attr);
-        }
-        attr.put(NewTaskForm.KEY_UNZIP_FLAG, taskForm.isUnzip());
-        attr.put(NewTaskForm.KEY_UNZIP_PATH, taskForm.getUnzipPath());
         //移除新的下载任务
         ContentManager.DOWN.removeBoot(taskForm.getId());
         //持久化
@@ -560,13 +552,6 @@ public class HttpDownController {
         }
         taskInfo.setFileName(taskForm.getFileName());
         taskInfo.setFilePath(taskForm.getFilePath());
-        Map<String, Object> attr = httpDownInfo.getAttrs();
-        if (attr == null) {
-          attr = new HashMap<>();
-          httpDownInfo.setAttrs(attr);
-        }
-        attr.put(NewTaskForm.KEY_UNZIP_FLAG, taskForm.isUnzip());
-        attr.put(NewTaskForm.KEY_UNZIP_PATH, taskForm.getUnzipPath());
         if (taskInfo.isSupportRange()) {
           taskInfo.setConnections(taskForm.getConnections());
         } else {

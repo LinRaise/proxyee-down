@@ -24,9 +24,8 @@ public class TaskInfo implements Serializable {
   private boolean supportRange;
   private long downSize;
   private long startTime = 0;
-  private long lastTime = 0;
-  private long pauseTime = 0;
   private int status;
+  private long speed;
   private List<ChunkInfo> chunkInfoList;
   private List<ConnectInfo> connectInfoList;
 
@@ -47,22 +46,22 @@ public class TaskInfo implements Serializable {
     List<ConnectInfo> connectInfoList = new ArrayList<>();
     if (getTotalSize() > 0) {  //非chunked编码
       //计算chunk列表
+      long chunkSize = getTotalSize() / getConnections();
       for (int i = 0; i < getConnections(); i++) {
         ChunkInfo chunkInfo = new ChunkInfo();
         ConnectInfo connectInfo = new ConnectInfo();
         chunkInfo.setIndex(i);
-        long chunkSize = getTotalSize() / getConnections();
-        chunkInfo.setOriStartPosition(i * chunkSize);
-        chunkInfo.setNowStartPosition(chunkInfo.getOriStartPosition());
+        long start = i * chunkSize;
         if (i == getConnections() - 1) { //最后一个连接去下载多出来的字节
           chunkSize += getTotalSize() % getConnections();
         }
-        chunkInfo.setEndPosition(chunkInfo.getOriStartPosition() + chunkSize - 1);
-        connectInfo.setChunkIndex(i);
-        connectInfo.setStartPosition(i * chunkSize);
-        connectInfo.setEndPosition(chunkInfo.getOriStartPosition() + chunkSize - 1);
+        long end = start + chunkSize - 1;
         chunkInfo.setTotalSize(chunkSize);
         chunkInfoList.add(chunkInfo);
+
+        connectInfo.setChunkIndex(i);
+        connectInfo.setStartPosition(start);
+        connectInfo.setEndPosition(end);
         connectInfoList.add(connectInfo);
       }
     } else { //chunked下载
@@ -70,8 +69,6 @@ public class TaskInfo implements Serializable {
       ConnectInfo connectInfo = new ConnectInfo();
       connectInfo.setChunkIndex(0);
       chunkInfo.setIndex(0);
-      chunkInfo.setNowStartPosition(0);
-      chunkInfo.setOriStartPosition(0);
       chunkInfoList.add(chunkInfo);
       connectInfoList.add(connectInfo);
     }
@@ -80,19 +77,24 @@ public class TaskInfo implements Serializable {
     return this;
   }
 
-  public void reset() {
-    startTime = lastTime = pauseTime = downSize = 0;
-    chunkInfoList.forEach((chunkInfo) -> {
-      chunkInfo.setStartTime(0);
-      chunkInfo.setLastTime(0);
-      chunkInfo.setPauseTime(0);
-      chunkInfo.setDownSize(0);
-      chunkInfo.setErrorCount(0);
-    });
+  public long getDownSize() {
+    return chunkInfoList.stream()
+        .mapToLong(ChunkInfo::getDownSize)
+        .sum();
   }
 
-  public void refresh(ChunkInfo chunkInfo) {
-    lastTime = System.currentTimeMillis();
-    chunkInfo.setLastTime(lastTime);
+  public long getSpeed() {
+    return chunkInfoList.stream()
+        .mapToLong(ChunkInfo::getSpeed)
+        .sum();
+  }
+
+  public void reset() {
+    startTime = 0;
+    chunkInfoList.forEach(chunkInfo -> {
+      chunkInfo.setStartTime(0);
+      chunkInfo.setPauseTime(0);
+      chunkInfo.setDownSize(0);
+    });
   }
 }

@@ -1,6 +1,8 @@
 package lee.study.down.model;
 
 import io.netty.channel.Channel;
+import io.netty.channel.ChannelHandlerContext;
+import io.netty.handler.timeout.ReadTimeoutHandler;
 import java.io.Serializable;
 import java.nio.channels.SeekableByteChannel;
 import lombok.AllArgsConstructor;
@@ -16,14 +18,13 @@ public class ConnectInfo implements Serializable {
   private long startPosition;
   private long endPosition;
   private long downSize;
+  private int errorCount;
   private int status = 0;
-  private long lastActionTime;
-  private long errorCount = 0;
   private int chunkIndex;
 
 
-  private Channel connectChannel;
-  private SeekableByteChannel fileChannel;
+  private transient Channel connectChannel;
+  private transient SeekableByteChannel fileChannel;
 
   public long getTotalSize() {
     return endPosition - startPosition + 1;

@@ -7,7 +7,6 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import lee.study.down.boot.TimeoutCheckTask;
 import lee.study.down.constant.HttpDownConstant;
 import lee.study.down.model.ConfigInfo;
 import lee.study.down.util.FileUtil;
@@ -24,7 +23,6 @@ public class ConfigContent {
   public void set(ConfigInfo configInfo) {
     configContent = configInfo;
     //设置超时检测时间
-    TimeoutCheckTask.getInstance().setTimeout(configInfo.getTimeout());
   }
 
   public ConfigInfo get() {

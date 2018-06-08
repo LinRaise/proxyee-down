@@ -37,7 +37,6 @@ public class HttpDownHandleInterceptFactory implements HttpDownInterceptFactory 
         TaskInfo taskInfo = HttpDownUtil.getTaskInfo(httpRequest,
             httpResponse.headers(),
             proxyConfig,
-            HttpDownConstant.clientSslContext,
             HttpDownConstant.clientLoopGroup);
         HttpDownInfo httpDownInfo = new HttpDownInfo(taskInfo, httpRequest, proxyConfig);
         ContentManager.DOWN.putBoot(httpDownInfo);

@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import lee.study.down.boot.DirectHttpDownBootstrapBuilder;
 import lee.study.down.boot.HttpDownBootstrap;
 import lee.study.down.constant.HttpDownConstant;
 import lee.study.down.constant.HttpDownStatus;
@@ -136,7 +137,7 @@ public class DownContent {
   }
 
   public void putBoot(HttpDownInfo httpDownInfo) {
-    HttpDownBootstrap bootstrap = HttpDownBootstrap.builder().httpDownInfo(httpDownInfo)
+    HttpDownBootstrap bootstrap = new DirectHttpDownBootstrapBuilder().httpDownInfo(httpDownInfo)
         .retryCount(ContentManager.CONFIG.get().getRetryCount())
         .callback(HttpDownConstant.httpDownCallback)
         .build();
@@ -197,7 +198,7 @@ public class DownContent {
         List<HttpDownInfo> records = (List<HttpDownInfo>) ByteUtil
             .deserialize(HttpDownConstant.TASK_RECORD_PATH);
         for (HttpDownInfo httpDownInfo : records) {
-          HttpDownBootstrap bootstrap = HttpDownBootstrap.builder().httpDownInfo(httpDownInfo)
+          HttpDownBootstrap bootstrap = new DirectHttpDownBootstrapBuilder().httpDownInfo(httpDownInfo)
               .retryCount(ContentManager.CONFIG.get().getRetryCount())
               .callback(HttpDownConstant.httpDownCallback)
               .build();

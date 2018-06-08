@@ -24,7 +24,6 @@ public class HttpDownProgressEventTask extends Thread {
           if (taskInfo.getStatus() != HttpDownStatus.DONE
               && taskInfo.getStatus() != HttpDownStatus.FAIL
               && taskInfo.getStatus() != HttpDownStatus.PAUSE) {
-            taskInfo.setLastTime(System.currentTimeMillis());
             //保存任务进度记录
             synchronized (taskInfo) {
               if (taskInfo.getStatus() != HttpDownStatus.DONE) {

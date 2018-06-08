@@ -20,6 +20,8 @@ import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.ssl.SslContext;
+import io.netty.handler.ssl.SslContextBuilder;
+import io.netty.handler.ssl.util.InsecureTrustManagerFactory;
 import io.netty.resolver.NoopAddressResolverGroup;
 import java.io.Closeable;
 import java.io.IOException;
@@ -35,6 +37,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import javax.net.ssl.SSLException;
 import lee.study.down.model.HttpHeadsInfo;
 import lee.study.down.model.HttpRequestInfo;
 import lee.study.down.model.HttpRequestInfo.HttpVer;
@@ -46,16 +49,27 @@ import lee.study.proxyee.util.ProtoUtil.RequestProto;
 
 public class HttpDownUtil {
 
+  private static SslContext sslContext;
+
+  public static SslContext getSslContext() throws SSLException {
+    if (sslContext == null) {
+      synchronized (HttpDownUtil.class) {
+        if (sslContext == null) {
+          sslContext = SslContextBuilder.forClient().trustManager(InsecureTrustManagerFactory.INSTANCE).build();
+        }
+      }
+    }
+    return sslContext;
+  }
+
   /**
    * 检测是否支持断点下载
    */
-  public static TaskInfo getTaskInfo(HttpRequest httpRequest, HttpHeaders resHeaders,
-      ProxyConfig proxyConfig,
-      SslContext clientSslCtx, NioEventLoopGroup loopGroup)
+  public static TaskInfo getTaskInfo(HttpRequest httpRequest, HttpHeaders resHeaders, ProxyConfig proxyConfig, NioEventLoopGroup loopGroup)
       throws Exception {
     HttpResponse httpResponse = null;
     if (resHeaders == null) {
-      httpResponse = getResponse(httpRequest, proxyConfig, clientSslCtx, loopGroup);
+      httpResponse = getResponse(httpRequest, proxyConfig, loopGroup);
       //处理重定向
       if ((httpResponse.status().code() + "").indexOf("30") == 0) {
         //TODO 302重定向乱码 https://link.gimhoy.com/googledrive/aHR0cHM6Ly9kcml2ZS5nb29nbGUuY29tL29wZW4/aWQ9MThlVmNKeEhwaE40RUpGTUowSk10bWNXOVhCcWJhVE1k.jpg
@@ -84,7 +98,7 @@ public class HttpDownUtil {
         RequestProto requestProto = ProtoUtil.getRequestProto(requestInfo);
         requestInfo.headers().set(HttpHeaderNames.HOST, requestProto.getHost());
         requestInfo.setRequestProto(requestProto);
-        return getTaskInfo(httpRequest, null, proxyConfig, clientSslCtx, loopGroup);
+        return getTaskInfo(httpRequest, null, proxyConfig, loopGroup);
       }
       resHeaders = httpResponse.headers();
     }
@@ -95,7 +109,7 @@ public class HttpDownUtil {
     //chunked编码不支持断点下载
     if (resHeaders.contains(HttpHeaderNames.CONTENT_LENGTH)) {
       if (httpResponse == null) {
-        httpResponse = getResponse(httpRequest, proxyConfig, clientSslCtx, loopGroup);
+        httpResponse = getResponse(httpRequest, proxyConfig, loopGroup);
       }
       //206表示支持断点下载
       if (httpResponse.status().equals(HttpResponseStatus.PARTIAL_CONTENT)) {
@@ -134,7 +148,7 @@ public class HttpDownUtil {
         fileName = matcher.group(1);
       }
     }
-    return fileName == null ? "未知文件.xxx" : fileName;
+    return fileName == null ? "未知文件" : fileName;
   }
 
   /**
@@ -182,9 +196,7 @@ public class HttpDownUtil {
   /**
    * 取请求响应
    */
-  public static HttpResponse getResponse(HttpRequest httpRequest, ProxyConfig proxyConfig,
-      SslContext clientSslCtx,
-      NioEventLoopGroup loopGroup) throws Exception {
+  public static HttpResponse getResponse(HttpRequest httpRequest, ProxyConfig proxyConfig, NioEventLoopGroup loopGroup) throws Exception {
     final HttpResponse[] httpResponses = new HttpResponse[1];
     CountDownLatch cdl = new CountDownLatch(1);
     HttpRequestInfo requestInfo = (HttpRequestInfo) httpRequest;
@@ -200,7 +212,7 @@ public class HttpDownUtil {
               ch.pipeline().addLast(ProxyHandleFactory.build(proxyConfig));
             }
             if (requestProto.getSsl()) {
-              ch.pipeline().addLast(clientSslCtx.newHandler(ch.alloc(), requestProto.getHost(), requestProto.getPort()));
+              ch.pipeline().addLast(getSslContext().newHandler(ch.alloc(), requestProto.getHost(), requestProto.getPort()));
             }
             ch.pipeline().addLast("httpCodec", new HttpClientCodec());
             ch.pipeline().addLast(new ChannelInboundHandlerAdapter() {
@@ -270,14 +282,11 @@ public class HttpDownUtil {
     HttpHeadsInfo headsInfo = new HttpHeadsInfo();
     headsInfo.add("Host", u.getHost());
     headsInfo.add("Connection", "keep-alive");
-    headsInfo.add("Upgrade-Insecure-Requests", "1");
     headsInfo.add("User-Agent",
         "Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/62.0.3202.75 Safari/537.36");
     headsInfo.add("Accept",
         "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8");
     headsInfo.add("Referer", u.getHost());
-    headsInfo.add("Accept-Encoding", "gzip, deflate, br");
-    headsInfo.add("Accept-Language", "zh-CN,zh;q=0.9");
     if (heads != null) {
       for (Entry<String, String> entry : heads.entrySet()) {
         headsInfo.set(entry.getKey(), entry.getValue());

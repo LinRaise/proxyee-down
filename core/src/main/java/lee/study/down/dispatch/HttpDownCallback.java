@@ -17,7 +17,7 @@ public class HttpDownCallback {
   public void onContinue(HttpDownInfo httpDownInfo) throws Exception {
   }
 
-  public void onError(HttpDownInfo httpDownInfo, Throwable cause) throws Exception {
+  public void onError(HttpDownInfo httpDownInfo, Throwable cause) {
   }
 
   public void onChunkError(HttpDownInfo httpDownInfo, ChunkInfo chunkInfo, Throwable cause)

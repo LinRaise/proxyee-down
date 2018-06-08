@@ -1,7 +1,6 @@
 package lee.study.down.boot;
 
 import io.netty.bootstrap.Bootstrap;
-import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.nio.NioEventLoopGroup;
@@ -9,17 +8,9 @@ import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.codec.http.DefaultLastHttpContent;
 import io.netty.handler.codec.http.HttpContent;
 import io.netty.handler.codec.http.HttpHeaderNames;
-import io.netty.handler.ssl.SslContext;
-import io.netty.handler.ssl.SslContextBuilder;
-import io.netty.handler.ssl.util.InsecureTrustManagerFactory;
 import io.netty.resolver.NoopAddressResolverGroup;
-import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.util.HashMap;
-import java.util.Map;
-import javax.net.ssl.SSLException;
 import lee.study.down.constant.HttpDownStatus;
 import lee.study.down.dispatch.HttpDownCallback;
 import lee.study.down.exception.BootstrapException;
@@ -32,10 +23,7 @@ import lee.study.down.model.TaskInfo;
 import lee.study.down.util.FileUtil;
 import lee.study.down.util.HttpDownUtil;
 import lee.study.proxyee.util.ProtoUtil.RequestProto;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
 import lombok.Data;
-import lombok.experimental.Accessors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -44,25 +32,20 @@ public class HttpDownBootstrap {
 
   protected static final Logger LOGGER = LoggerFactory.getLogger(HttpDownBootstrap.class);
 
-  private static SslContext trustSslContext;
-
   private HttpDownInfo httpDownInfo;
-  private int retryCount;
+  private NioEventLoopGroup loopGroup;
   private HttpDownCallback callback;
 
-  private NioEventLoopGroup clientLoopGroup;
+  HttpDownBootstrap() {
 
-  private HttpDownBootstrap() {
-
-  }
-
-  public static HttpDownBootstrapBuilder builder() {
-    return new HttpDownBootstrapBuilder();
   }
 
   public void startDown() throws Exception {
     TaskInfo taskInfo = httpDownInfo.getTaskInfo();
     taskInfo.buildChunkInfoList();
+    if (taskInfo.getFilePath() == null || "".equals(taskInfo.getFilePath().trim())) {
+      throw new BootstrapException("下载路径不能为空");
+    }
     if (!FileUtil.exists(taskInfo.getFilePath())) {
       FileUtil.createDirSmart(taskInfo.getFilePath());
     }
@@ -75,16 +58,22 @@ public class HttpDownBootstrap {
     }
     //有文件同名
     if (new File(taskInfo.buildTaskFilePath()).exists()) {
-      throw new BootstrapException("文件名已存在，请修改文件名");
+      if (httpDownInfo.isAutoRename()) {
+        taskInfo.setFileName(FileUtil.renameIfExists(taskInfo.buildTaskFilePath()));
+      } else {
+        throw new BootstrapException("文件名已存在，请修改文件名");
+      }
     }
     //创建文件
-    FileUtil.createSparseFile(taskInfo.buildTaskFilePath(), taskInfo.getTotalSize());
+    if (taskInfo.isSupportRange()) {
+      FileUtil.createSparseFile(taskInfo.buildTaskFilePath(), taskInfo.getTotalSize());
+    } else {
+      FileUtil.createFile(taskInfo.buildTaskFilePath());
+    }
     //文件下载开始回调
     taskInfo.reset();
     taskInfo.setStatus(HttpDownStatus.RUNNING);
     taskInfo.setStartTime(System.currentTimeMillis());
-    //线程池初始化
-    clientLoopGroup = new NioEventLoopGroup(1);
     for (int i = 0; i < taskInfo.getConnectInfoList().size(); i++) {
       ChunkInfo chunkInfo = taskInfo.getChunkInfoList().get(i);
       ConnectInfo connectInfo = taskInfo.getConnectInfoList().get(i);
@@ -96,13 +85,13 @@ public class HttpDownBootstrap {
     }
   }
 
-  protected void connect(ConnectInfo connectInfo) throws Exception {
+  protected void connect(ConnectInfo connectInfo) {
     HttpRequestInfo requestInfo = (HttpRequestInfo) httpDownInfo.getRequest();
     RequestProto requestProto = requestInfo.requestProto();
     LOGGER.debug("开始下载：" + connectInfo);
     Bootstrap bootstrap = new Bootstrap()
         .channel(NioSocketChannel.class)
-        .group(clientLoopGroup)
+        .group(loopGroup)
         .handler(new HttpDownInitializer(requestProto.getSsl(), this, connectInfo));
     if (httpDownInfo.getProxyConfig() != null) {
       //代理服务器解析DNS和连接
@@ -110,7 +99,6 @@ public class HttpDownBootstrap {
     }
     ChannelFuture cf = bootstrap.connect(requestProto.getHost(), requestProto.getPort());
     //重置最后下载时间
-    connectInfo.setLastActionTime(System.currentTimeMillis());
     connectInfo.setConnectChannel(cf.channel());
     cf.addListener((ChannelFutureListener) future -> {
       if (future.isSuccess()) {
@@ -136,18 +124,31 @@ public class HttpDownBootstrap {
   /**
    * 重新发起连接
    */
-  public void reConnect(ConnectInfo connectInfo)
-      throws Exception {
+  public void reConnect(ConnectInfo connectInfo) {
+    reConnect(connectInfo, false);
+  }
+
+  /**
+   * 重新发起连接
+   *
+   * @param connectInfo 连接相关信息
+   * @param isHelp 是否为帮助其他分段下载发起的连接
+   */
+  public void reConnect(ConnectInfo connectInfo, boolean isHelp) {
     TaskInfo taskInfo = httpDownInfo.getTaskInfo();
-    if (taskInfo.isSupportRange()) {
+    if (taskInfo.isSupportRange() && connectInfo.getDownSize() >= connectInfo.getTotalSize()) {
+      return;
+    }
+    if (!isHelp && taskInfo.isSupportRange()) {
       connectInfo.setStartPosition(connectInfo.getStartPosition() + connectInfo.getDownSize());
     }
-    if (connectInfo.getErrorCount() < retryCount) {
+    connectInfo.setDownSize(0);
+    if (connectInfo.getErrorCount() < httpDownInfo.getRetryCount()) {
       connect(connectInfo);
     } else {
       if (taskInfo.getConnectInfoList().stream()
           .filter(connect -> connect.getStatus() != HttpDownStatus.DONE)
-          .allMatch(connect -> connect.getErrorCount() >= retryCount)) {
+          .allMatch(connect -> connect.getErrorCount() >= httpDownInfo.getRetryCount())) {
         taskInfo.setStatus(HttpDownStatus.FAIL);
         if (callback != null) {
           callback.onError(httpDownInfo, null);
@@ -197,29 +198,26 @@ public class HttpDownBootstrap {
         startDown();
       } else {
         taskInfo.setStatus(HttpDownStatus.RUNNING);
-        taskInfo.getChunkInfoList().forEach((chunk) -> chunk.setErrorCount(0));
-        long curTime = System.currentTimeMillis();
-        taskInfo.setPauseTime(taskInfo.getPauseTime() + (curTime - taskInfo.getLastTime()));
-        taskInfo.setLastTime(curTime);
+        taskInfo.getConnectInfoList().forEach(connectInfo -> connectInfo.setErrorCount(0));
         //线程初始化
-        clientLoopGroup = new NioEventLoopGroup(1);
+        if (loopGroup == null || loopGroup.isShutdown()) {
+          loopGroup = new NioEventLoopGroup(1);
+        }
         for (ConnectInfo connectInfo : taskInfo.getConnectInfoList()) {
-          if (connectInfo.getStatus() == HttpDownStatus.PAUSE
-              || connectInfo.getStatus() == HttpDownStatus.CONNECTING_FAIL) {
+          if (connectInfo.getStatus() == HttpDownStatus.PAUSE) {
+            reConnect(connectInfo);
           }
         }
-        /*for (ChunkInfo chunkInfo : taskInfo.getChunkInfoList()) {
-          if (chunkInfo.getStatus() == HttpDownStatus.PAUSE
-              || chunkInfo.getStatus() == HttpDownStatus.CONNECTING_FAIL) {
-            chunkInfo.setPauseTime(taskInfo.getPauseTime());
-            chunkInfo.setLastTime(curTime);
-          }
-        }*/
       }
     }
     if (callback != null) {
       callback.onContinue(httpDownInfo);
     }
+  }
+
+  public void done() throws IOException {
+    deleteRecord();
+    close();
   }
 
   public void close() {
@@ -229,8 +227,8 @@ public class HttpDownBootstrap {
         close(connectInfo);
       }
     }
-    if (clientLoopGroup != null) {
-      clientLoopGroup.shutdownGracefully();
+    if (loopGroup != null) {
+      loopGroup.shutdownGracefully();
     }
   }
 
@@ -247,9 +245,7 @@ public class HttpDownBootstrap {
     //删除任务进度记录文件
     synchronized (taskInfo) {
       close();
-      TimeoutCheckTask.getInstance().delBoot(httpDownInfo.getTaskInfo().getId());
-      FileUtil.deleteIfExists(taskInfo.buildTaskRecordFilePath());
-      FileUtil.deleteIfExists(taskInfo.buildTaskRecordBakFilePath());
+      deleteRecord();
       if (delFile) {
         FileUtil.deleteIfExists(taskInfo.buildTaskFilePath());
       }
@@ -259,34 +255,9 @@ public class HttpDownBootstrap {
     }
   }
 
-  public static class HttpDownBootstrapBuilder {
-
-    private HttpDownInfo httpDownInfo;
-    private int retryCount;
-    private HttpDownCallback callback;
-
-    public HttpDownBootstrapBuilder httpDownInfo(HttpDownInfo httpDownInfo) {
-      this.httpDownInfo = httpDownInfo;
-      return this;
-    }
-
-    public HttpDownBootstrapBuilder retryCount(int retryCount) {
-      this.retryCount = retryCount;
-      return this;
-    }
-
-    public HttpDownBootstrapBuilder callback(HttpDownCallback callback) {
-      this.callback = callback;
-      return this;
-    }
-
-    public HttpDownBootstrap build() {
-      HttpDownBootstrap bootstrap = new HttpDownBootstrap();
-      bootstrap.setHttpDownInfo(httpDownInfo);
-      bootstrap.setRetryCount(retryCount <= 0 ? 5 : retryCount);
-      bootstrap.setCallback(callback);
-      TimeoutCheckTask.getInstance().addBoot(bootstrap);
-      return bootstrap;
-    }
+  private void deleteRecord() throws IOException {
+    TaskInfo taskInfo = httpDownInfo.getTaskInfo();
+    FileUtil.deleteIfExists(taskInfo.buildTaskRecordFilePath());
+    FileUtil.deleteIfExists(taskInfo.buildTaskRecordBakFilePath());
   }
 }

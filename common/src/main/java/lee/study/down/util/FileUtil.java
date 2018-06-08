@@ -311,12 +311,16 @@ public class FileUtil {
    */
   public static void createSparseFile(String filePath, long length) throws IOException {
     Path path = Paths.get(filePath);
-    Files.deleteIfExists(path);
-    try (
-        SeekableByteChannel channel = Files.newByteChannel(path, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE, StandardOpenOption.SPARSE)
-    ) {
-      channel.position(length - 1);
-      channel.write(ByteBuffer.wrap(new byte[]{0}));
+    try {
+      Files.deleteIfExists(path);
+      try (
+          SeekableByteChannel channel = Files.newByteChannel(path, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE, StandardOpenOption.SPARSE)
+      ) {
+        channel.position(length - 1);
+        channel.write(ByteBuffer.wrap(new byte[]{0}));
+      }
+    } catch (IOException e) {
+      throw new IOException("create spares file fail,path:" + filePath + " length:" + length, e);
     }
   }
 }
