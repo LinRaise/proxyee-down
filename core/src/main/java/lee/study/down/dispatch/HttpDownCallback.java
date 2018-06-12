@@ -2,34 +2,31 @@ package lee.study.down.dispatch;
 
 import lee.study.down.model.ChunkInfo;
 import lee.study.down.model.HttpDownInfo;
+import lee.study.down.model.TaskInfo;
 
 public class HttpDownCallback {
 
-  public void onStart(HttpDownInfo httpDownInfo) throws Exception {
+  public void onStart(HttpDownInfo httpDownInfo) {
   }
 
-  public void onProgress(HttpDownInfo httpDownInfo) {
+  public void onProgress(HttpDownInfo httpDownInfo, TaskInfo taskInfo) {
   }
 
-  public void onPause(HttpDownInfo httpDownInfo) throws Exception {
+  public void onPause(HttpDownInfo httpDownInfo, TaskInfo taskInfo) {
   }
 
-  public void onContinue(HttpDownInfo httpDownInfo) throws Exception {
+  public void onContinue(HttpDownInfo httpDownInfo, TaskInfo taskInfo) {
   }
 
-  public void onError(HttpDownInfo httpDownInfo, Throwable cause) {
+  public void onChunkError(HttpDownInfo httpDownInfo, TaskInfo taskInfo, ChunkInfo chunkInfo) {
   }
 
-  public void onChunkError(HttpDownInfo httpDownInfo, ChunkInfo chunkInfo, Throwable cause)
-      throws Exception {
+  public void onError(HttpDownInfo httpDownInfo, TaskInfo taskInfo) {
   }
 
-  public void onChunkDone(HttpDownInfo httpDownInfo, ChunkInfo chunkInfo) throws Exception {
+  public void onChunkDone(HttpDownInfo httpDownInfo, TaskInfo taskInfo, ChunkInfo chunkInfo) {
   }
 
-  public void onDone(HttpDownInfo httpDownInfo) {
-  }
-
-  public void onDelete(HttpDownInfo httpDownInfo) throws Exception {
+  public void onDone(HttpDownInfo httpDownInfo, TaskInfo taskInfo) {
   }
 }

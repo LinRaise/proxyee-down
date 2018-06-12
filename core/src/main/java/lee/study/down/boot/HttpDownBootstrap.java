@@ -37,6 +37,7 @@ public class HttpDownBootstrap {
   protected static final Logger LOGGER = LoggerFactory.getLogger(HttpDownBootstrap.class);
 
   private HttpDownInfo httpDownInfo;
+  private TaskInfo taskInfo;
   private NioEventLoopGroup loopGroup;
   private HttpDownCallback callback;
 
@@ -47,44 +48,42 @@ public class HttpDownBootstrap {
   }
 
   public void startDown() throws Exception {
-    TaskInfo taskInfo = httpDownInfo.getTaskInfo();
-    HttpDownUtil.buildChunkInfoList(taskInfo);
-    if (taskInfo.getFilePath() == null || "".equals(taskInfo.getFilePath().trim())) {
+    taskInfo = new TaskInfo();
+    HttpDownUtil.buildChunkInfoList(httpDownInfo, taskInfo);
+    if (httpDownInfo.getFilePath() == null || "".equals(httpDownInfo.getFilePath().trim())) {
       throw new BootstrapException("下载路径不能为空");
     }
-    if (!FileUtil.exists(taskInfo.getFilePath())) {
-      FileUtil.createDirSmart(taskInfo.getFilePath());
+    if (!FileUtil.exists(httpDownInfo.getFilePath())) {
+      FileUtil.createDirSmart(httpDownInfo.getFilePath());
     }
-    if (!FileUtil.canWrite(taskInfo.getFilePath())) {
+    if (!FileUtil.canWrite(httpDownInfo.getFilePath())) {
       throw new BootstrapException("无权访问下载路径，请修改路径或开放目录写入权限");
     }
     //磁盘空间不足
-    if (taskInfo.getTotalSize() > FileUtil.getDiskFreeSize(taskInfo.getFilePath())) {
+    if (httpDownInfo.getTotalSize() > FileUtil.getDiskFreeSize(httpDownInfo.getFilePath())) {
       throw new BootstrapException("磁盘空间不足，请修改路径");
     }
     //有文件同名
-    if (new File(HttpDownUtil.getTaskFilePath(taskInfo)).exists()) {
+    if (new File(HttpDownUtil.getTaskFilePath(httpDownInfo)).exists()) {
       if (httpDownInfo.isAutoRename()) {
-        taskInfo.setFileName(FileUtil.renameIfExists(HttpDownUtil.getTaskFilePath(taskInfo)));
+        httpDownInfo.setFileName(FileUtil.renameIfExists(HttpDownUtil.getTaskFilePath(httpDownInfo)));
       } else {
         throw new BootstrapException("文件名已存在，请修改文件名");
       }
     }
     //创建文件
-    if (taskInfo.isSupportRange()) {
-      FileUtil.createSparseFile(HttpDownUtil.getTaskFilePath(taskInfo), taskInfo.getTotalSize());
+    if (httpDownInfo.isSupportRange()) {
+      FileUtil.createSparseFile(HttpDownUtil.getTaskFilePath(httpDownInfo), httpDownInfo.getTotalSize());
     } else {
-      FileUtil.createFile(HttpDownUtil.getTaskFilePath(taskInfo));
+      FileUtil.createFile(HttpDownUtil.getTaskFilePath(httpDownInfo));
     }
     //文件下载开始回调
-    HttpDownUtil.reset(taskInfo);
     taskInfo.setStartTime(System.currentTimeMillis());
     commonStart();
     for (int i = 0; i < taskInfo.getConnectInfoList().size(); i++) {
       ConnectInfo connectInfo = taskInfo.getConnectInfoList().get(i);
       connect(connectInfo);
     }
-    saveRecord();
     if (callback != null) {
       callback.onStart(httpDownInfo);
     }
@@ -108,7 +107,7 @@ public class HttpDownBootstrap {
     cf.addListener((ChannelFutureListener) future -> {
       if (future.isSuccess()) {
         LOGGER.debug("连接成功：" + connectInfo);
-        if (httpDownInfo.getTaskInfo().isSupportRange()) {
+        if (httpDownInfo.isSupportRange()) {
           requestInfo.headers().set(HttpHeaderNames.RANGE, "bytes=" + connectInfo.getStartPosition() + "-" + connectInfo.getEndPosition());
         } else {
           requestInfo.headers().remove(HttpHeaderNames.RANGE);
@@ -140,20 +139,22 @@ public class HttpDownBootstrap {
    * @param isHelp 是否为帮助其他分段下载发起的连接
    */
   public void reConnect(ConnectInfo connectInfo, boolean isHelp) {
-    TaskInfo taskInfo = httpDownInfo.getTaskInfo();
-    if (!isHelp && taskInfo.isSupportRange()) {
+    if (!isHelp && httpDownInfo.isSupportRange()) {
       connectInfo.setStartPosition(connectInfo.getStartPosition() + connectInfo.getDownSize());
     }
     connectInfo.setDownSize(0);
     if (connectInfo.getErrorCount() < httpDownInfo.getRetryCount()) {
       connect(connectInfo);
     } else {
+      if (callback != null) {
+        callback.onChunkError(httpDownInfo, taskInfo, taskInfo.getChunkInfoList().get(connectInfo.getChunkIndex()));
+      }
       if (taskInfo.getConnectInfoList().stream()
           .filter(connect -> connect.getStatus() != HttpDownStatus.DONE)
           .allMatch(connect -> connect.getErrorCount() >= httpDownInfo.getRetryCount())) {
-        close();
         taskInfo.setStatus(HttpDownStatus.FAIL);
         taskInfo.getChunkInfoList().forEach(chunkInfo -> chunkInfo.setStatus(HttpDownStatus.FAIL));
+        close();
         if (callback != null) {
           callback.onError(httpDownInfo, null);
         }
@@ -165,13 +166,11 @@ public class HttpDownBootstrap {
    * 暂停下载
    */
   public void pauseDown() throws Exception {
-    TaskInfo taskInfo = httpDownInfo.getTaskInfo();
     synchronized (taskInfo) {
       if (taskInfo.getStatus() == HttpDownStatus.PAUSE
           || taskInfo.getStatus() == HttpDownStatus.DONE) {
         return;
       }
-      close();
       taskInfo.setStatus(HttpDownStatus.PAUSE);
       long time = System.currentTimeMillis();
       for (ChunkInfo chunkInfo : taskInfo.getChunkInfoList()) {
@@ -180,10 +179,10 @@ public class HttpDownBootstrap {
           chunkInfo.setLastPauseTime(time);
         }
       }
+      close();
     }
-    saveRecord();
     if (callback != null) {
-      callback.onPause(httpDownInfo);
+      callback.onPause(httpDownInfo, taskInfo);
     }
   }
 
@@ -192,13 +191,12 @@ public class HttpDownBootstrap {
    */
   public void continueDown()
       throws Exception {
-    TaskInfo taskInfo = httpDownInfo.getTaskInfo();
     synchronized (taskInfo) {
       if (taskInfo.getStatus() == HttpDownStatus.RUNNING
           || taskInfo.getStatus() == HttpDownStatus.DONE) {
         return;
       }
-      if (!FileUtil.exists(HttpDownUtil.getTaskFilePath(taskInfo))) {
+      if (!FileUtil.exists(HttpDownUtil.getTaskFilePath(httpDownInfo))) {
         close();
         startDown();
       } else {
@@ -217,24 +215,21 @@ public class HttpDownBootstrap {
         }
       }
     }
-    saveRecord();
     if (callback != null) {
-      callback.onContinue(httpDownInfo);
+      callback.onContinue(httpDownInfo, taskInfo);
     }
   }
 
   public void done() throws IOException {
-    deleteRecord();
     stopThreads();
     if (callback != null) {
-      callback.onDone(httpDownInfo);
+      callback.onDone(httpDownInfo, taskInfo);
     }
   }
 
   public void close() {
-    TaskInfo taskInfo = httpDownInfo.getTaskInfo();
     synchronized (taskInfo) {
-      for (ConnectInfo connectInfo : httpDownInfo.getTaskInfo().getConnectInfoList()) {
+      for (ConnectInfo connectInfo : taskInfo.getConnectInfoList()) {
         close(connectInfo);
       }
     }
@@ -249,7 +244,7 @@ public class HttpDownBootstrap {
     }
   }
 
-  public void delete(boolean delFile) throws Exception {
+  /*public void delete(boolean delFile) throws Exception {
     TaskInfo taskInfo = httpDownInfo.getTaskInfo();
     //删除任务进度记录文件
     synchronized (taskInfo) {
@@ -281,7 +276,7 @@ public class HttpDownBootstrap {
     } catch (IOException e) {
       LOGGER.error("deleteRecord error", e);
     }
-  }
+  }*/
 
   private void stopThreads() {
     loopGroup.shutdownGracefully();
@@ -291,7 +286,6 @@ public class HttpDownBootstrap {
   }
 
   private void commonStart() {
-    TaskInfo taskInfo = httpDownInfo.getTaskInfo();
     taskInfo.setStatus(HttpDownStatus.RUNNING);
     taskInfo.setLastStartTime(0);
     taskInfo.getChunkInfoList().forEach(chunkInfo -> {
@@ -321,7 +315,6 @@ public class HttpDownBootstrap {
 
     @Override
     public void run() {
-      TaskInfo taskInfo = getHttpDownInfo().getTaskInfo();
       while (run) {
         if (taskInfo.getStatus() != HttpDownStatus.DONE) {
           for (ChunkInfo chunkInfo : taskInfo.getChunkInfoList()) {
@@ -338,7 +331,7 @@ public class HttpDownBootstrap {
               .filter(chunkInfo -> chunkInfo.getStatus() != HttpDownStatus.DONE)
               .mapToLong(ChunkInfo::getSpeed)
               .sum());
-          callback.onProgress(httpDownInfo);
+          callback.onProgress(httpDownInfo, taskInfo);
         }
         try {
           TimeUnit.SECONDS.sleep(period);

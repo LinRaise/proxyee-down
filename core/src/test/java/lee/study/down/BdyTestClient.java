@@ -3,8 +3,8 @@ package lee.study.down;
 import lee.study.down.boot.HttpDownBootstrap;
 import lee.study.down.boot.URLHttpDownBootstrapBuilder;
 import lee.study.down.dispatch.HttpDownCallback;
-import lee.study.down.model.ChunkInfo;
 import lee.study.down.model.HttpDownInfo;
+import lee.study.down.model.TaskInfo;
 
 public class BdyTestClient {
 
@@ -16,13 +16,13 @@ public class BdyTestClient {
         .callback(new HttpDownCallback() {
 
           @Override
-          public void onProgress(HttpDownInfo httpDownInfo) {
-            System.out.println("speed:" + httpDownInfo.getTaskInfo().getSpeed());
+          public void onProgress(HttpDownInfo httpDownInfo, TaskInfo taskInfo) {
+            System.out.println("speed:" + taskInfo.getSpeed());
           }
 
           @Override
-          public void onDone(HttpDownInfo httpDownInfo)  {
-            System.out.println("final speed:" + httpDownInfo.getTaskInfo().getSpeed());
+          public void onDone(HttpDownInfo httpDownInfo, TaskInfo taskInfo) {
+            System.out.println("final speed:" + taskInfo.getSpeed());
           }
 
         })

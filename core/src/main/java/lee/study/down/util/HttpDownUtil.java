@@ -70,7 +70,7 @@ public class HttpDownUtil {
   /**
    * 检测是否支持断点下载
    */
-  public static TaskInfo getTaskInfo(HttpRequest httpRequest, HttpHeaders resHeaders, ProxyConfig proxyConfig, NioEventLoopGroup loopGroup)
+  public static HttpDownInfo getHttpDownInfo(HttpRequest httpRequest, HttpHeaders resHeaders, ProxyConfig proxyConfig, NioEventLoopGroup loopGroup)
       throws Exception {
     HttpResponse httpResponse = null;
     if (resHeaders == null) {
@@ -103,14 +103,14 @@ public class HttpDownUtil {
         RequestProto requestProto = ProtoUtil.getRequestProto(requestInfo);
         requestInfo.headers().set(HttpHeaderNames.HOST, requestProto.getHost());
         requestInfo.setRequestProto(requestProto);
-        return getTaskInfo(httpRequest, null, proxyConfig, loopGroup);
+        return getHttpDownInfo(httpRequest, null, proxyConfig, loopGroup);
       }
       resHeaders = httpResponse.headers();
     }
-    TaskInfo taskInfo = new TaskInfo()
-        .setId(UUID.randomUUID().toString())
-        .setFileName(getDownFileName(httpRequest, resHeaders))
-        .setTotalSize(getDownFileSize(resHeaders));
+    HttpDownInfo httpDownInfo = new HttpDownInfo();
+    httpDownInfo.setId(UUID.randomUUID().toString());
+    httpDownInfo.setFileName(getDownFileName(httpRequest, resHeaders));
+    httpDownInfo.setTotalSize(getDownFileSize(resHeaders));
     //chunked编码不支持断点下载
     if (resHeaders.contains(HttpHeaderNames.CONTENT_LENGTH)) {
       if (httpResponse == null) {
@@ -118,10 +118,10 @@ public class HttpDownUtil {
       }
       //206表示支持断点下载
       if (httpResponse.status().equals(HttpResponseStatus.PARTIAL_CONTENT)) {
-        taskInfo.setSupportRange(true);
+        httpDownInfo.setSupportRange(true);
       }
     }
-    return taskInfo;
+    return httpDownInfo;
   }
 
   public static String getDownFileName(HttpRequest httpRequest, HttpHeaders resHeaders) {
@@ -321,22 +321,22 @@ public class HttpDownUtil {
   /**
    * 取下载文件绝对路径
    */
-  public static String getTaskFilePath(TaskInfo taskInfo) {
-    return taskInfo.getFilePath() + File.separator + taskInfo.getFileName();
+  public static String getTaskFilePath(HttpDownInfo httpDownInfo) {
+    return httpDownInfo.getFilePath() + File.separator + httpDownInfo.getFileName();
   }
 
   /**
    * 取下载文件记录信息文件路径
    */
-  public static String getTaskRecordFilePath(TaskInfo taskInfo) {
-    return getTaskRecordFilePath(taskInfo.getFilePath(), taskInfo.getFileName());
+  public static String getTaskRecordFilePath(HttpDownInfo httpDownInfo) {
+    return getTaskRecordFilePath(httpDownInfo.getFilePath(), httpDownInfo.getFileName());
   }
 
   /**
    * 取下载文件记录信息备份文件路径
    */
-  public static String getTaskRecordBakFilePath(TaskInfo taskInfo) {
-    return getTaskRecordBakFilePath(taskInfo.getFilePath(), taskInfo.getFileName());
+  public static String getTaskRecordBakFilePath(HttpDownInfo httpDownInfo) {
+    return getTaskRecordBakFilePath(httpDownInfo.getFilePath(), httpDownInfo.getFileName());
   }
 
   /**
@@ -356,19 +356,19 @@ public class HttpDownUtil {
   /**
    * 生成下载分段信息
    */
-  public static void buildChunkInfoList(TaskInfo taskInfo) {
+  public static void buildChunkInfoList(HttpDownInfo httpDownInfo, TaskInfo taskInfo) {
     List<ChunkInfo> chunkInfoList = new ArrayList<>();
     List<ConnectInfo> connectInfoList = new ArrayList<>();
-    if (taskInfo.getTotalSize() > 0) {  //非chunked编码
+    if (httpDownInfo.getTotalSize() > 0) {  //非chunked编码
       //计算chunk列表
-      long chunkSize = taskInfo.getTotalSize() / taskInfo.getConnections();
-      for (int i = 0; i < taskInfo.getConnections(); i++) {
+      long chunkSize = httpDownInfo.getTotalSize() / httpDownInfo.getConnections();
+      for (int i = 0; i < httpDownInfo.getConnections(); i++) {
         ChunkInfo chunkInfo = new ChunkInfo();
         ConnectInfo connectInfo = new ConnectInfo();
         chunkInfo.setIndex(i);
         long start = i * chunkSize;
-        if (i == taskInfo.getConnections() - 1) { //最后一个连接去下载多出来的字节
-          chunkSize += taskInfo.getTotalSize() % taskInfo.getConnections();
+        if (i == httpDownInfo.getConnections() - 1) { //最后一个连接去下载多出来的字节
+          chunkSize += httpDownInfo.getTotalSize() % httpDownInfo.getConnections();
         }
         long end = start + chunkSize - 1;
         chunkInfo.setTotalSize(chunkSize);
@@ -399,8 +399,7 @@ public class HttpDownUtil {
       chunkInfo.setDownSize(0);
     });
   }
-
-  public static void save(HttpDownInfo httpDownInfo) throws IOException {
+  /*public static void save(HttpDownInfo httpDownInfo) throws IOException {
     TaskInfo taskInfo = httpDownInfo.getTaskInfo();
     ByteUtil.serialize(httpDownInfo, getTaskRecordFilePath(taskInfo), getTaskRecordBakFilePath(taskInfo), true);
   }
@@ -408,5 +407,5 @@ public class HttpDownUtil {
   public static HttpDownInfo get(String filePath) throws IOException, ClassNotFoundException {
     File file = new File(filePath);
     return (HttpDownInfo) ByteUtil.deserialize(getTaskRecordFilePath(file.getParent(), file.getName()), getTaskRecordBakFilePath(file.getParent(), file.getName()));
-  }
+  }*/
 }

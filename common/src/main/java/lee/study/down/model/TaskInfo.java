@@ -14,12 +14,6 @@ import lombok.experimental.Accessors;
 public class TaskInfo implements Serializable {
 
   private static final long serialVersionUID = 4813413517396555930L;
-  private String id;
-  private String filePath;
-  private String fileName;
-  private int connections;
-  private long totalSize;
-  private boolean supportRange;
   private long downSize;
   private long startTime = 0;
   private long lastStartTime = 0;

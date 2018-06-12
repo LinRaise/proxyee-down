@@ -16,6 +16,7 @@ import lee.study.down.boot.HttpDownBootstrap;
 import lee.study.down.boot.URLHttpDownBootstrapBuilder;
 import lee.study.down.dispatch.HttpDownCallback;
 import lee.study.down.model.HttpDownInfo;
+import lee.study.down.model.TaskInfo;
 import lee.study.down.server.ChunkedDownTestServer;
 import lee.study.down.server.RangeDownTestServer;
 import lee.study.down.util.FileUtil;
@@ -109,20 +110,20 @@ public class DownTestClient {
         .callback(new HttpDownCallback() {
 
           @Override
-          public void onProgress(HttpDownInfo httpDownInfo) {
-            System.out.println("speed:" + httpDownInfo.getTaskInfo().getSpeed());
+          public void onProgress(HttpDownInfo httpDownInfo, TaskInfo taskInfo) {
+            System.out.println("speed:" + taskInfo.getSpeed());
           }
 
           @Override
-          public void onDone(HttpDownInfo httpDownInfo) {
-            System.out.println("final speed:" + httpDownInfo.getTaskInfo().getSpeed());
+          public void onDone(HttpDownInfo httpDownInfo, TaskInfo taskInfo) {
+            System.out.println("final speed:" + taskInfo.getSpeed());
             String sourceMd5 = getMd5ByFile(new File(TEST_BUILD_FILE));
-            String downMd5 = getMd5ByFile(new File(HttpDownUtil.getTaskFilePath(httpDownInfo.getTaskInfo())));
+            String downMd5 = getMd5ByFile(new File(HttpDownUtil.getTaskFilePath(httpDownInfo)));
             if (sourceMd5.equals(downMd5)) {
               succ.set(true);
             }
             try {
-              FileUtil.deleteIfExists(HttpDownUtil.getTaskFilePath(httpDownInfo.getTaskInfo()));
+              FileUtil.deleteIfExists(HttpDownUtil.getTaskFilePath(httpDownInfo));
             } catch (IOException e) {
               e.printStackTrace();
             }
@@ -130,17 +131,17 @@ public class DownTestClient {
           }
 
           @Override
-          public void onError(HttpDownInfo httpDownInfo, Throwable cause) {
+          public void onError(HttpDownInfo httpDownInfo, TaskInfo taskInfo) {
             countDownLatch.countDown();
           }
 
           @Override
-          public void onPause(HttpDownInfo httpDownInfo) throws Exception {
+          public void onPause(HttpDownInfo httpDownInfo, TaskInfo taskInfo) {
             System.out.println("onPause");
           }
 
           @Override
-          public void onContinue(HttpDownInfo httpDownInfo) throws Exception {
+          public void onContinue(HttpDownInfo httpDownInfo, TaskInfo taskInfo) {
             System.out.println("onContinue");
           }
         })

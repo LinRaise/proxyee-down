@@ -48,10 +48,11 @@ public class URLHttpDownBootstrapBuilder extends HttpDownBootstrapBuilderAdapter
   @Override
   protected HttpDownInfo getHttpDownInfo() throws Exception {
     HttpRequestInfo requestInfo = HttpDownUtil.buildGetRequest(url, heads, body);
-    TaskInfo taskInfo = HttpDownUtil.getTaskInfo(requestInfo, null, null, getLoopGroup());
-    taskInfo.setFilePath(path);
-    taskInfo.setConnections(taskInfo.isSupportRange() ? (connections <= 0 ? 32 : connections) : 1);
-    return new HttpDownInfo(taskInfo, requestInfo);
+    HttpDownInfo httpDownInfo = HttpDownUtil.getHttpDownInfo(requestInfo, null, null, getLoopGroup());
+    httpDownInfo.setFilePath(path);
+    httpDownInfo.setRequest(requestInfo);
+    httpDownInfo.setConnections(httpDownInfo.isSupportRange() ? (connections <= 0 ? 32 : connections) : 1);
+    return httpDownInfo;
   }
 
   @Override

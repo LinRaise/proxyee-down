@@ -3,6 +3,7 @@ package lee.study.down.boot;
 import io.netty.channel.nio.NioEventLoopGroup;
 import lee.study.down.dispatch.HttpDownCallback;
 import lee.study.down.model.HttpDownInfo;
+import lee.study.proxyee.proxy.ProxyConfig;
 
 public abstract class HttpDownBootstrapBuilderAdapter<T extends AbstractHttpDownBootstrapBuilder> extends AbstractHttpDownBootstrapBuilder {
 

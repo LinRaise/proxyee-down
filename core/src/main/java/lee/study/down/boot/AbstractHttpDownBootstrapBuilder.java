@@ -4,6 +4,7 @@ import io.netty.channel.nio.NioEventLoopGroup;
 import lee.study.down.dispatch.HttpDownCallback;
 import lee.study.down.exception.BootstrapBuildException;
 import lee.study.down.model.HttpDownInfo;
+import lee.study.proxyee.proxy.ProxyConfig;
 
 /**
  * 用于创建一个HTTP下载器

@@ -21,6 +21,7 @@ import lee.study.down.constant.HttpDownStatus;
 import lee.study.down.dispatch.HttpDownCallback;
 import lee.study.down.model.ChunkInfo;
 import lee.study.down.model.ConnectInfo;
+import lee.study.down.model.HttpDownInfo;
 import lee.study.down.model.HttpRequestInfo;
 import lee.study.down.model.TaskInfo;
 import lee.study.down.util.HttpDownUtil;
@@ -59,7 +60,8 @@ public class HttpDownInitializer extends ChannelInitializer {
     ch.pipeline().addLast("httpCodec", new HttpClientCodec());
     ch.pipeline().addLast(new ChannelInboundHandlerAdapter() {
 
-      private TaskInfo taskInfo = bootstrap.getHttpDownInfo().getTaskInfo();
+      private HttpDownInfo httpDownInfo = bootstrap.getHttpDownInfo();
+      private TaskInfo taskInfo = bootstrap.getTaskInfo();
       private ChunkInfo chunkInfo = taskInfo.getChunkInfoList().get(connectInfo.getChunkIndex());
       private SeekableByteChannel fileChannel;
       private HttpDownCallback callback = bootstrap.getCallback();
@@ -78,7 +80,7 @@ public class HttpDownInitializer extends ChannelInitializer {
               ByteBuf byteBuf = httpContent.content();
               int size = byteBuf.readableBytes();
               //判断是否超出下载字节范围
-              if (taskInfo.isSupportRange() && connectInfo.getDownSize() + size > connectInfo.getTotalSize()) {
+              if (httpDownInfo.isSupportRange() && connectInfo.getDownSize() + size > connectInfo.getTotalSize()) {
                 size = (int) (connectInfo.getTotalSize() - connectInfo.getDownSize());
               }
               fileChannel.write(byteBuf.nioBuffer());
@@ -110,7 +112,7 @@ public class HttpDownInitializer extends ChannelInitializer {
                   }
                 }
               }
-              if (!taskInfo.isSupportRange() && !(httpContent instanceof LastHttpContent)) {
+              if (!httpDownInfo.isSupportRange() && !(httpContent instanceof LastHttpContent)) {
                 return;
               }
               long time = System.currentTimeMillis();
@@ -128,12 +130,12 @@ public class HttpDownInitializer extends ChannelInitializer {
                   }
                   //分段下载完成回调
                   if (callback != null) {
-                    callback.onChunkDone(bootstrap.getHttpDownInfo(), chunkInfo);
+                    callback.onChunkDone(httpDownInfo, taskInfo, chunkInfo);
                   }
                   //所有分段都下载完成
                   if (taskInfo.getChunkInfoList().stream().allMatch((chunk) -> chunk.getStatus() == HttpDownStatus.DONE)) {
-                    if (!taskInfo.isSupportRange()) {  //chunked编码最后更新文件大小
-                      taskInfo.setTotalSize(taskInfo.getDownSize());
+                    if (!httpDownInfo.isSupportRange()) {  //chunked编码最后更新文件大小
+                      httpDownInfo.setTotalSize(taskInfo.getDownSize());
                       taskInfo.getChunkInfoList().get(0).setTotalSize(taskInfo.getDownSize());
                     }
                     //文件下载完成回调
@@ -141,7 +143,7 @@ public class HttpDownInitializer extends ChannelInitializer {
                     connectInfo.setStatus(HttpDownStatus.DONE);
                     taskInfo.setStatus(HttpDownStatus.DONE);
                     //计算平均速度
-                    taskInfo.setSpeed(calcSpeed(taskInfo.getTotalSize(), System.currentTimeMillis() - taskInfo.getStartTime()));
+                    taskInfo.setSpeed(calcSpeed(httpDownInfo.getTotalSize(), System.currentTimeMillis() - taskInfo.getStartTime()));
                     bootstrap.done();
                     return;
                   }
@@ -191,8 +193,8 @@ public class HttpDownInitializer extends ChannelInitializer {
               return;
             }
             LOGGER.debug("下载响应：" + connectInfo);
-            fileChannel = Files.newByteChannel(Paths.get(HttpDownUtil.getTaskFilePath(taskInfo)), StandardOpenOption.WRITE);
-            if (taskInfo.isSupportRange()) {
+            fileChannel = Files.newByteChannel(Paths.get(HttpDownUtil.getTaskFilePath(httpDownInfo)), StandardOpenOption.WRITE);
+            if (httpDownInfo.isSupportRange()) {
               fileChannel.position(connectInfo.getStartPosition() + connectInfo.getDownSize());
             }
             connectInfo.setFileChannel(fileChannel);
@@ -206,7 +208,7 @@ public class HttpDownInitializer extends ChannelInitializer {
       }
 
       private boolean isChunkDownDone(HttpContent httpContent) {
-        if (taskInfo.isSupportRange()) {
+        if (httpDownInfo.isSupportRange()) {
           if (chunkInfo.getDownSize() >= chunkInfo.getTotalSize()) {
             return true;
           }
@@ -231,9 +233,6 @@ public class HttpDownInitializer extends ChannelInitializer {
         LOGGER.error("down onChunkError:", cause);
         normalClose = true;
         bootstrap.close(connectInfo);
-        if (callback != null) {
-          callback.onChunkError(bootstrap.getHttpDownInfo(), chunkInfo, cause);
-        }
         bootstrap.reConnect(connectInfo);
       }
 
@@ -241,7 +240,9 @@ public class HttpDownInitializer extends ChannelInitializer {
       public void channelUnregistered(ChannelHandlerContext ctx) throws Exception {
         super.channelUnregistered(ctx);
         //还未下载完成，继续下载
-        if (!normalClose && chunkInfo.getStatus() != HttpDownStatus.PAUSE) {
+        if (!normalClose
+            && chunkInfo.getStatus() != HttpDownStatus.PAUSE
+            && chunkInfo.getStatus() != HttpDownStatus.FAIL) {
           LOGGER.debug("channelUnregistered:" + connectInfo + "\t" + chunkInfo);
           bootstrap.close(connectInfo);
           bootstrap.reConnect(connectInfo);
