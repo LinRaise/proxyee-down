@@ -1,14 +1,10 @@
 package lee.study.down.boot;
 
 import io.netty.channel.nio.NioEventLoopGroup;
-import java.util.Map;
 import lee.study.down.dispatch.HttpDownCallback;
 import lee.study.down.model.HttpDownInfo;
-import lee.study.down.model.HttpRequestInfo;
-import lee.study.down.model.TaskInfo;
-import lee.study.down.util.HttpDownUtil;
 
-public class HttpDownBootstrapBuilderAdapter<T extends AbstractHttpDownBootstrapBuilder> extends AbstractHttpDownBootstrapBuilder {
+public abstract class HttpDownBootstrapBuilderAdapter<T extends AbstractHttpDownBootstrapBuilder> extends AbstractHttpDownBootstrapBuilder {
 
   @Override
   public T timeout(int timeout) {
@@ -41,7 +37,5 @@ public class HttpDownBootstrapBuilderAdapter<T extends AbstractHttpDownBootstrap
   }
 
   @Override
-  protected HttpDownInfo getHttpDownInfo() throws Exception {
-    return null;
-  }
+  protected abstract HttpDownInfo getHttpDownInfo() throws Exception;
 }

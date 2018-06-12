@@ -8,7 +8,7 @@ public class HttpDownCallback {
   public void onStart(HttpDownInfo httpDownInfo) throws Exception {
   }
 
-  public void onProgress(HttpDownInfo httpDownInfo, ChunkInfo chunkInfo) throws Exception {
+  public void onProgress(HttpDownInfo httpDownInfo) {
   }
 
   public void onPause(HttpDownInfo httpDownInfo) throws Exception {
@@ -27,7 +27,7 @@ public class HttpDownCallback {
   public void onChunkDone(HttpDownInfo httpDownInfo, ChunkInfo chunkInfo) throws Exception {
   }
 
-  public void onDone(HttpDownInfo httpDownInfo) throws Exception {
+  public void onDone(HttpDownInfo httpDownInfo) {
   }
 
   public void onDelete(HttpDownInfo httpDownInfo) throws Exception {

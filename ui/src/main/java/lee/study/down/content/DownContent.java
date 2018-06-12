@@ -6,7 +6,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import lee.study.down.boot.DirectHttpDownBootstrapBuilder;
+import lee.study.down.boot.DefaultHttpDownBootstrapBuilder;
 import lee.study.down.boot.HttpDownBootstrap;
 import lee.study.down.constant.HttpDownConstant;
 import lee.study.down.constant.HttpDownStatus;
@@ -18,6 +18,7 @@ import lee.study.down.mvc.form.WsForm;
 import lee.study.down.mvc.ws.WsDataType;
 import lee.study.down.util.ByteUtil;
 import lee.study.down.util.FileUtil;
+import lee.study.down.util.HttpDownUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.BeanUtils;
@@ -137,7 +138,7 @@ public class DownContent {
   }
 
   public void putBoot(HttpDownInfo httpDownInfo) {
-    HttpDownBootstrap bootstrap = new DirectHttpDownBootstrapBuilder().httpDownInfo(httpDownInfo)
+    HttpDownBootstrap bootstrap = new DefaultHttpDownBootstrapBuilder().httpDownInfo(httpDownInfo)
         .retryCount(ContentManager.CONFIG.get().getRetryCount())
         .callback(HttpDownConstant.httpDownCallback)
         .build();
@@ -179,8 +180,8 @@ public class DownContent {
       TaskInfo taskInfo = getTaskInfo(id);
       if (taskInfo != null) {
         synchronized (taskInfo) {
-          ByteUtil.serialize(taskInfo, taskInfo.buildTaskRecordFilePath(),
-              taskInfo.buildTaskRecordBakFilePath());
+          ByteUtil.serialize(taskInfo, HttpDownUtil.getTaskRecordFilePath(taskInfo),
+              HttpDownUtil.getTaskRecordBakFilePath(taskInfo));
         }
       }
     } catch (IOException e) {
@@ -198,7 +199,7 @@ public class DownContent {
         List<HttpDownInfo> records = (List<HttpDownInfo>) ByteUtil
             .deserialize(HttpDownConstant.TASK_RECORD_PATH);
         for (HttpDownInfo httpDownInfo : records) {
-          HttpDownBootstrap bootstrap = new DirectHttpDownBootstrapBuilder().httpDownInfo(httpDownInfo)
+          HttpDownBootstrap bootstrap = new DefaultHttpDownBootstrapBuilder().httpDownInfo(httpDownInfo)
               .retryCount(ContentManager.CONFIG.get().getRetryCount())
               .callback(HttpDownConstant.httpDownCallback)
               .build();
@@ -208,18 +209,18 @@ public class DownContent {
           }
           //下载未完成
           if (taskInfo.getStatus() != HttpDownStatus.DONE) {
-            String taskDetailPath = taskInfo.buildTaskRecordFilePath();
-            String taskDetailBakPath = taskInfo.buildTaskRecordBakFilePath();
+            String taskDetailPath = HttpDownUtil.getTaskRecordFilePath(taskInfo);
+            String taskDetailBakPath = HttpDownUtil.getTaskRecordBakFilePath(taskInfo);
             //存在下载进度信息则更新,否则重新下载
             if (FileUtil.existsAny(taskDetailPath, taskDetailBakPath)) {
               try {
                 taskInfo = (TaskInfo) ByteUtil.deserialize(taskDetailPath, taskDetailBakPath);
                 httpDownInfo.setTaskInfo(taskInfo);
               } catch (IOException | ClassNotFoundException e) {
-                taskInfo.reset();
+                HttpDownUtil.reset(taskInfo);
               }
             } else {
-              taskInfo.reset();
+              HttpDownUtil.reset(taskInfo);
             }
             if (taskInfo.getStatus() != HttpDownStatus.FAIL) {
               //设置为暂停状态

@@ -391,23 +391,27 @@ public class HttpDownController {
     try {
       updateBootstrap = updateService.update(updateInfo, new HttpDownCallback() {
         @Override
-        public void onDone(HttpDownInfo httpDownInfo) throws Exception {
-          String zipPath = httpDownInfo.getTaskInfo().buildTaskFilePath();
+        public void onDone(HttpDownInfo httpDownInfo) {
+          String zipPath = HttpDownUtil.getTaskFilePath(httpDownInfo.getTaskInfo());
           String unzipDir = "proxyee-down-" + updateInfo.getVersionStr();
           String unzipPath = unzipDir + "/main/proxyee-down-core.jar";
-          //下载完解压
-          FileUtil.unzip(zipPath, null, unzipPath);
-          //复制出来
-          Files.copy(
-              Paths.get(httpDownInfo.getTaskInfo().getFilePath() + File.separator + unzipPath),
-              Paths.get(httpDownInfo.getTaskInfo().getFilePath() + File.separator
-                  + "proxyee-down-core.jar.bak"));
-          //删除临时的文件
-          FileUtil
-              .deleteIfExists(zipPath);
-          FileUtil
-              .deleteIfExists(
-                  httpDownInfo.getTaskInfo().getFilePath() + File.separator + unzipDir);
+          try {
+            //下载完解压
+            FileUtil.unzip(zipPath, null, unzipPath);
+            //复制出来
+            Files.copy(
+                Paths.get(httpDownInfo.getTaskInfo().getFilePath() + File.separator + unzipPath),
+                Paths.get(httpDownInfo.getTaskInfo().getFilePath() + File.separator
+                    + "proxyee-down-core.jar.bak"));
+            //删除临时的文件
+            FileUtil
+                .deleteIfExists(zipPath);
+            FileUtil
+                .deleteIfExists(
+                    httpDownInfo.getTaskInfo().getFilePath() + File.separator + unzipDir);
+          } catch (Exception e) {
+            LOGGER.error("unzip error", e);
+          }
           //通知客户端
           ContentManager.WS
               .sendMsg(new WsForm(WsDataType.UPDATE_PROGRESS, httpDownInfo.getTaskInfo()));

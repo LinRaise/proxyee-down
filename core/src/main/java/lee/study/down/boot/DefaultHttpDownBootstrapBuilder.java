@@ -3,11 +3,11 @@ package lee.study.down.boot;
 import lee.study.down.exception.BootstrapBuildException;
 import lee.study.down.model.HttpDownInfo;
 
-public class DirectHttpDownBootstrapBuilder extends AbstractHttpDownBootstrapBuilder {
+public class DefaultHttpDownBootstrapBuilder extends AbstractHttpDownBootstrapBuilder {
 
   private HttpDownInfo httpDownInfo;
 
-  public DirectHttpDownBootstrapBuilder httpDownInfo(HttpDownInfo httpDownInfo) {
+  public DefaultHttpDownBootstrapBuilder httpDownInfo(HttpDownInfo httpDownInfo) {
     this.httpDownInfo = httpDownInfo;
     return this;
   }

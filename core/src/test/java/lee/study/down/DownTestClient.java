@@ -6,7 +6,6 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.nio.file.Files;
 import java.security.MessageDigest;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
@@ -16,11 +15,11 @@ import java.util.concurrent.atomic.AtomicInteger;
 import lee.study.down.boot.HttpDownBootstrap;
 import lee.study.down.boot.URLHttpDownBootstrapBuilder;
 import lee.study.down.dispatch.HttpDownCallback;
-import lee.study.down.model.ChunkInfo;
 import lee.study.down.model.HttpDownInfo;
 import lee.study.down.server.ChunkedDownTestServer;
 import lee.study.down.server.RangeDownTestServer;
 import lee.study.down.util.FileUtil;
+import lee.study.down.util.HttpDownUtil;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -34,7 +33,7 @@ public class DownTestClient {
   public void httpServerStart() throws InterruptedException, IOException {
     FileUtil.createDir(TEST_PATH);
     //生成下载文件
-    buildRandomFile(TEST_BUILD_FILE, 1024 * 1024 * 512L);
+    buildRandomFile(TEST_BUILD_FILE, 1024 * 1024 * 100L);
     //正常下载
     new RangeDownTestServer(TEST_BUILD_FILE).start(8866);
     //超时下载
@@ -60,16 +59,22 @@ public class DownTestClient {
 
   @Test
   public void down() throws Exception {
-    downTest(8866, 8);
-    //downTest(8866, 1);
-    /*downTest(8866, 4);
+    //正常下载
+    downTest(8866, 1);
+    downTest(8866, 4);
     downTest(8866, 32);
     downTest(8866, 64);
+    //超时下载
     downTest(8867, 1);
     downTest(8867, 4);
     downTest(8867, 32);
     downTest(8867, 64);
-    downTest(8868, 2);*/
+    //chunked编码下载
+    downTest(8868, 2);
+    //限速5MB/S
+    downTest(8866, 4, 1024 * 1024 * 5L, 0);
+    //暂停5S继续
+    downTest(8866, 4, 0, 5000L);
   }
 
   @After
@@ -93,43 +98,66 @@ public class DownTestClient {
 
   }
 
-  private void downTest(int port, int connections) throws Exception {
+  private void downTest(int port, int connections, long speedLimit, long pauseTime) throws Exception {
     CountDownLatch countDownLatch = new CountDownLatch(1);
     AtomicBoolean succ = new AtomicBoolean(false);
     HttpDownBootstrap httpDownBootstrap = new URLHttpDownBootstrapBuilder().url("http://127.0.0.1:" + port)
         .path(TEST_PATH)
         .connections(connections)
-        .loopGroup(null)
         .timeout(5)
-        .speedLimit(1024 * 1024 * 20L)
+        .speedLimit(speedLimit)
         .callback(new HttpDownCallback() {
 
           @Override
-          public void onProgress(HttpDownInfo httpDownInfo, ChunkInfo chunkInfo) throws Exception {
+          public void onProgress(HttpDownInfo httpDownInfo) {
             System.out.println("speed:" + httpDownInfo.getTaskInfo().getSpeed());
           }
 
           @Override
-          public void onDone(HttpDownInfo httpDownInfo) throws Exception {
+          public void onDone(HttpDownInfo httpDownInfo) {
             System.out.println("final speed:" + httpDownInfo.getTaskInfo().getSpeed());
             String sourceMd5 = getMd5ByFile(new File(TEST_BUILD_FILE));
-            String downMd5 = getMd5ByFile(new File(httpDownInfo.getTaskInfo().buildTaskFilePath()));
+            String downMd5 = getMd5ByFile(new File(HttpDownUtil.getTaskFilePath(httpDownInfo.getTaskInfo())));
             if (sourceMd5.equals(downMd5)) {
               succ.set(true);
             }
-            FileUtil.deleteIfExists(httpDownInfo.getTaskInfo().buildTaskFilePath());
+            try {
+              FileUtil.deleteIfExists(HttpDownUtil.getTaskFilePath(httpDownInfo.getTaskInfo()));
+            } catch (IOException e) {
+              e.printStackTrace();
+            }
             countDownLatch.countDown();
           }
 
           @Override
-          public void onError(HttpDownInfo httpDownInfo, Throwable cause){
+          public void onError(HttpDownInfo httpDownInfo, Throwable cause) {
             countDownLatch.countDown();
+          }
+
+          @Override
+          public void onPause(HttpDownInfo httpDownInfo) throws Exception {
+            System.out.println("onPause");
+          }
+
+          @Override
+          public void onContinue(HttpDownInfo httpDownInfo) throws Exception {
+            System.out.println("onContinue");
           }
         })
         .build();
     httpDownBootstrap.startDown();
+    if (pauseTime > 0) {
+      Thread.sleep(233L);
+      httpDownBootstrap.pauseDown();
+      Thread.sleep(pauseTime);
+      httpDownBootstrap.continueDown();
+    }
     countDownLatch.await();
     assert succ.get();
+  }
+
+  private void downTest(int port, int connections) throws Exception {
+    downTest(port, connections, 0, 0);
   }
 
   private static String getMd5ByFile(File file) {

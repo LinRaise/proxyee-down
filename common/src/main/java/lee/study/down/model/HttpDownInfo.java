@@ -1,12 +1,14 @@
 package lee.study.down.model;
 
 import io.netty.handler.codec.http.HttpRequest;
+import java.io.Serializable;
 import lee.study.proxyee.proxy.ProxyConfig;
 import lombok.Data;
 
 @Data
-public class HttpDownInfo {
+public class HttpDownInfo implements Serializable{
 
+  private static final long serialVersionUID = 231649750985691346L;
   private int timeout;
   private int retryCount;
   private boolean autoRename;

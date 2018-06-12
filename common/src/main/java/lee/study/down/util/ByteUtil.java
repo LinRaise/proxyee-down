@@ -99,14 +99,14 @@ public class ByteUtil {
       throws IOException {
     FileUtil.initFile(path, isHidden);
     try (
-        RandomAccessFile raf = new RandomAccessFile(path, "rw")
+        RandomAccessFile raf = new RandomAccessFile(path, "rws")
     ) {
       raf.write(objToBts(object));
     }
     if (bakPath != null) {
       FileUtil.initFile(bakPath, isHidden);
       try (
-          RandomAccessFile raf2 = new RandomAccessFile(bakPath, "rw")
+          RandomAccessFile raf2 = new RandomAccessFile(bakPath, "rws")
       ) {
         raf2.write(objToBts(object));
       }

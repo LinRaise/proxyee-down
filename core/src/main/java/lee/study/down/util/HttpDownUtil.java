@@ -24,10 +24,12 @@ import io.netty.handler.ssl.SslContextBuilder;
 import io.netty.handler.ssl.util.InsecureTrustManagerFactory;
 import io.netty.resolver.NoopAddressResolverGroup;
 import java.io.Closeable;
+import java.io.File;
 import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLDecoder;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -38,6 +40,9 @@ import java.util.concurrent.TimeoutException;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import javax.net.ssl.SSLException;
+import lee.study.down.model.ChunkInfo;
+import lee.study.down.model.ConnectInfo;
+import lee.study.down.model.HttpDownInfo;
 import lee.study.down.model.HttpHeadsInfo;
 import lee.study.down.model.HttpRequestInfo;
 import lee.study.down.model.HttpRequestInfo.HttpVer;
@@ -311,5 +316,97 @@ public class HttpDownUtil {
   public static HttpRequestInfo buildGetRequest(String url)
       throws MalformedURLException {
     return buildGetRequest(url, null, null);
+  }
+
+  /**
+   * 取下载文件绝对路径
+   */
+  public static String getTaskFilePath(TaskInfo taskInfo) {
+    return taskInfo.getFilePath() + File.separator + taskInfo.getFileName();
+  }
+
+  /**
+   * 取下载文件记录信息文件路径
+   */
+  public static String getTaskRecordFilePath(TaskInfo taskInfo) {
+    return getTaskRecordFilePath(taskInfo.getFilePath(), taskInfo.getFileName());
+  }
+
+  /**
+   * 取下载文件记录信息备份文件路径
+   */
+  public static String getTaskRecordBakFilePath(TaskInfo taskInfo) {
+    return getTaskRecordBakFilePath(taskInfo.getFilePath(), taskInfo.getFileName());
+  }
+
+  /**
+   * 取下载文件记录信息文件路径
+   */
+  public static String getTaskRecordFilePath(String filePath, String fileName) {
+    return filePath + File.separator + "." + fileName + ".inf";
+  }
+
+  /**
+   * 取下载文件记录信息文件路径
+   */
+  public static String getTaskRecordBakFilePath(String filePath, String fileName) {
+    return getTaskRecordFilePath(filePath, fileName) + ".bak";
+  }
+
+  /**
+   * 生成下载分段信息
+   */
+  public static void buildChunkInfoList(TaskInfo taskInfo) {
+    List<ChunkInfo> chunkInfoList = new ArrayList<>();
+    List<ConnectInfo> connectInfoList = new ArrayList<>();
+    if (taskInfo.getTotalSize() > 0) {  //非chunked编码
+      //计算chunk列表
+      long chunkSize = taskInfo.getTotalSize() / taskInfo.getConnections();
+      for (int i = 0; i < taskInfo.getConnections(); i++) {
+        ChunkInfo chunkInfo = new ChunkInfo();
+        ConnectInfo connectInfo = new ConnectInfo();
+        chunkInfo.setIndex(i);
+        long start = i * chunkSize;
+        if (i == taskInfo.getConnections() - 1) { //最后一个连接去下载多出来的字节
+          chunkSize += taskInfo.getTotalSize() % taskInfo.getConnections();
+        }
+        long end = start + chunkSize - 1;
+        chunkInfo.setTotalSize(chunkSize);
+        chunkInfoList.add(chunkInfo);
+
+        connectInfo.setChunkIndex(i);
+        connectInfo.setStartPosition(start);
+        connectInfo.setEndPosition(end);
+        connectInfoList.add(connectInfo);
+      }
+    } else { //chunked下载
+      ChunkInfo chunkInfo = new ChunkInfo();
+      ConnectInfo connectInfo = new ConnectInfo();
+      connectInfo.setChunkIndex(0);
+      chunkInfo.setIndex(0);
+      chunkInfoList.add(chunkInfo);
+      connectInfoList.add(connectInfo);
+    }
+    taskInfo.setChunkInfoList(chunkInfoList);
+    taskInfo.setConnectInfoList(connectInfoList);
+  }
+
+  public static void reset(TaskInfo taskInfo) {
+    taskInfo.setStartTime(0);
+    taskInfo.setLastStartTime(0);
+    taskInfo.getChunkInfoList().forEach(chunkInfo -> {
+      chunkInfo.setPauseTime(0);
+      chunkInfo.setDownSize(0);
+    });
+  }
+
+  public static void save(HttpDownInfo httpDownInfo) throws IOException {
+    TaskInfo taskInfo = httpDownInfo.getTaskInfo();
+    ByteUtil.serialize(httpDownInfo, getTaskRecordFilePath(taskInfo), getTaskRecordBakFilePath(taskInfo), true);
+  }
+
+  public static HttpDownInfo get(String filePath) throws IOException, ClassNotFoundException {
+    File file = new File(filePath);
+    return (HttpDownInfo) ByteUtil.deserialize(getTaskRecordFilePath(file.getParent(), file.getName()), getTaskRecordBakFilePath(file.getParent(), file.getName()));
   }
 }

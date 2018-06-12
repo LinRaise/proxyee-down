@@ -8,6 +8,9 @@ import lee.study.down.model.HttpRequestInfo;
 import lee.study.down.model.TaskInfo;
 import lee.study.down.util.HttpDownUtil;
 
+/**
+ * 通过URL创建一个下载任务
+ */
 public class URLHttpDownBootstrapBuilder extends HttpDownBootstrapBuilderAdapter<URLHttpDownBootstrapBuilder> {
 
   private String url;

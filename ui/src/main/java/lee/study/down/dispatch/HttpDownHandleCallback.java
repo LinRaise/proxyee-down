@@ -1,5 +1,6 @@
 package lee.study.down.dispatch;
 
+import java.io.IOException;
 import java.util.HashMap;
 import lee.study.down.content.ContentManager;
 import lee.study.down.io.BdyZip;
@@ -10,6 +11,7 @@ import lee.study.down.mvc.form.NewTaskForm;
 import lee.study.down.mvc.form.WsForm;
 import lee.study.down.mvc.ws.WsDataType;
 import lee.study.down.util.FileUtil;
+import lee.study.down.util.HttpDownUtil;
 
 public class HttpDownHandleCallback extends HttpDownCallback {
 
@@ -46,26 +48,34 @@ public class HttpDownHandleCallback extends HttpDownCallback {
   }
 
   @Override
-  public void onDone(HttpDownInfo httpDownInfo) throws Exception {
+  public void onDone(HttpDownInfo httpDownInfo) {
     TaskInfo taskInfo = httpDownInfo.getTaskInfo();
     //更改任务下载状态为已完成
     ContentManager.DOWN.save();
     //删除任务进度记录文件
     synchronized (taskInfo) {
-      FileUtil.deleteIfExists(taskInfo.buildTaskRecordFilePath());
-      FileUtil.deleteIfExists(taskInfo.buildTaskRecordBakFilePath());
+      try {
+        FileUtil.deleteIfExists(HttpDownUtil.getTaskRecordFilePath(taskInfo));
+        FileUtil.deleteIfExists(HttpDownUtil.getTaskRecordBakFilePath(taskInfo));
+      } catch (IOException e) {
+        e.printStackTrace();
+      }
     }
     sendTask(httpDownInfo.getTaskInfo().getId());
     NewTaskForm taskForm = NewTaskForm.parse(httpDownInfo);
     if (taskForm.isUnzip()) {
-      if (BdyZip.isBdyZip(taskInfo.buildTaskFilePath())) {
-        WsForm wsForm = new WsForm(WsDataType.UNZIP_NEW, new HashMap<String, String>() {
-          {
-            put("filePath", taskInfo.buildTaskFilePath());
-            put("toPath", taskForm.getUnzipPath());
-          }
-        });
-        ContentManager.WS.sendMsg(wsForm);
+      try {
+        if (BdyZip.isBdyZip(HttpDownUtil.getTaskFilePath(taskInfo))) {
+          WsForm wsForm = new WsForm(WsDataType.UNZIP_NEW, new HashMap<String, String>() {
+            {
+              put("filePath", HttpDownUtil.getTaskFilePath(taskInfo));
+              put("toPath", taskForm.getUnzipPath());
+            }
+          });
+          ContentManager.WS.sendMsg(wsForm);
+        }
+      } catch (IOException e) {
+        e.printStackTrace();
       }
     }
   }

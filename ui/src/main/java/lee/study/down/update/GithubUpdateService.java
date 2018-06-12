@@ -1,7 +1,7 @@
 package lee.study.down.update;
 
 import java.util.Collections;
-import lee.study.down.boot.DirectHttpDownBootstrapBuilder;
+import lee.study.down.boot.DefaultHttpDownBootstrapBuilder;
 import lee.study.down.boot.HttpDownBootstrap;
 import lee.study.down.constant.HttpDownConstant;
 import lee.study.down.dispatch.HttpDownCallback;
@@ -53,16 +53,16 @@ public class GithubUpdateService implements UpdateService {
       throws Exception {
     HttpRequestInfo requestInfo = HttpDownUtil.buildGetRequest(updateInfo.getUrl());
     TaskInfo taskInfo = HttpDownUtil
-        .getTaskInfo(requestInfo, null, null,HttpDownConstant.clientLoopGroup)
+        .getTaskInfo(requestInfo, null, null, HttpDownConstant.clientLoopGroup)
         .setConnections(64)
         .setFileName("proxyee-down-jar.zip")
         .setFilePath(
             HttpDownConstant.HOME_PATH.substring(0, HttpDownConstant.HOME_PATH.length() - 1));
     HttpDownInfo httpDownInfo = new HttpDownInfo(taskInfo, requestInfo, null);
-    HttpDownBootstrap bootstrap = new DirectHttpDownBootstrapBuilder().httpDownInfo(httpDownInfo)
+    HttpDownBootstrap bootstrap = new DefaultHttpDownBootstrapBuilder().httpDownInfo(httpDownInfo)
         .callback(callback)
         .build();
-    FileUtil.deleteIfExists(bootstrap.getHttpDownInfo().getTaskInfo().buildTaskFilePath());
+    FileUtil.deleteIfExists(HttpDownUtil.getTaskFilePath(bootstrap.getHttpDownInfo().getTaskInfo()));
     bootstrap.startDown();
     return bootstrap;
   }

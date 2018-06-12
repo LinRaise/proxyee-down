@@ -20,7 +20,6 @@ public class DownTimeoutHandler extends ReadTimeoutHandler {
 
   public void updateLastReadTime(long sleepTime) throws IllegalAccessException {
     long readTime = READ_TIME.getLong(this);
-    long sleepTimeNano = TimeUnit.MILLISECONDS.toNanos(sleepTime);
-    READ_TIME.set(this, readTime == -1 ? sleepTimeNano : readTime + sleepTimeNano);
+    READ_TIME.set(this, readTime == -1 ? sleepTime : readTime + sleepTime);
   }
 }

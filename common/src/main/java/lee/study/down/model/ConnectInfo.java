@@ -19,8 +19,8 @@ public class ConnectInfo implements Serializable {
   private long endPosition;
   private long downSize;
   private int errorCount;
-  private int status = 0;
   private int chunkIndex;
+  private int status;
 
 
   private transient Channel connectChannel;

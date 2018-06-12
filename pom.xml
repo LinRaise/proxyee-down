@@ -13,6 +13,7 @@
     <module>sniff</module>
     <module>ui</module>
     <module>update</module>
+    <module>sdk</module>
   </modules>
   <name>proxyee-down</name>
   <url>https://github.com/monkeyWie/proxyee-down</url>

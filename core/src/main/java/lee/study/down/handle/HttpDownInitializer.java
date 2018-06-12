@@ -33,6 +33,7 @@ public class HttpDownInitializer extends ChannelInitializer {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(HttpDownInitializer.class);
   private static final long SIZE_1MB = 1024 * 1024L;
+  private static final double TIME_1S_NANO = (double) TimeUnit.SECONDS.toNanos(1);
 
   private boolean isSsl;
   private HttpDownBootstrap bootstrap;
@@ -69,115 +70,112 @@ public class HttpDownInitializer extends ChannelInitializer {
       public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
         try {
           if (msg instanceof HttpContent) {
-            if (!isSuccess || !fileChannel.isOpen() || !ctx.channel().isOpen()) {
-              return;
-            }
-            HttpContent httpContent = (HttpContent) msg;
-            ByteBuf byteBuf = httpContent.content();
-            int size = byteBuf.readableBytes();
-            //判断是否超出下载字节范围
-            if (taskInfo.isSupportRange() && connectInfo.getDownSize() + size > connectInfo.getTotalSize()) {
-              size = (int) (connectInfo.getTotalSize() - connectInfo.getDownSize());
-            }
-            fileChannel.write(byteBuf.nioBuffer());
-            chunkInfo.setDownSize(chunkInfo.getDownSize() + size);
-            connectInfo.setDownSize(connectInfo.getDownSize() + size);
-            long time = System.currentTimeMillis();
-            if (chunkInfo.getLastCountTime() <= 0) {
-              chunkInfo.setLastCountTime(time);
-              chunkInfo.setLastCountSize(chunkInfo.getDownSize());
-            }
-            //计算分段下载速度,至少间隔1S以上才计算
-            if (time - chunkInfo.getLastCountTime() >= 1000) {
-              chunkInfo.setSpeed(calcSpeed(chunkInfo.getDownSize() - chunkInfo.getLastCountSize(), time - chunkInfo.getLastCountTime()));
-              chunkInfo.setLastCountTime(time);
-              chunkInfo.setLastCountSize(chunkInfo.getDownSize());
-              if (callback != null) {
-                callback.onProgress(bootstrap.getHttpDownInfo(), chunkInfo);
+            synchronized (taskInfo) {
+              if (!isSuccess || !fileChannel.isOpen() || !ctx.channel().isOpen()) {
+                return;
               }
-              //如果下载速度超过了设置的限制速度，则线程阻塞
-              if (bootstrap.getHttpDownInfo().getSpeedLimit() > 0 && !isChunkDownDone(httpContent) && taskInfo.getSpeed() > bootstrap.getHttpDownInfo().getSpeedLimit()) {
-                //计算sleep时间
-                long sleepTime = (long) ((taskInfo.getSpeed() / (double) bootstrap.getHttpDownInfo().getSpeedLimit() - 1) * 1000);
-                LOGGER.debug("下载超速阻塞" + sleepTime + ":" + connectInfo);
-                TimeUnit.MILLISECONDS.sleep(sleepTime);
-                //刷新其他分段的lastCountTime
-                for (ChunkInfo ci : taskInfo.getChunkInfoList()) {
-                  if (ci != chunkInfo) {
-                    chunkInfo.setLastCountTime((chunkInfo.getLastCountTime() <= 0 ? time : chunkInfo.getLastCountTime()) + sleepTime);
-                  }
-                }
-                //刷新其他连接的lastReadTime
-                for (ConnectInfo ci : taskInfo.getConnectInfoList()) {
-                  if (ci.getConnectChannel() != null && ci.getConnectChannel() != ch) {
-                    DownTimeoutHandler downTimeout = (DownTimeoutHandler) ci.getConnectChannel().pipeline().get("downTimeout");
-                    if (downTimeout != null) {
-                      downTimeout.updateLastReadTime(sleepTime);
+              HttpContent httpContent = (HttpContent) msg;
+              ByteBuf byteBuf = httpContent.content();
+              int size = byteBuf.readableBytes();
+              //判断是否超出下载字节范围
+              if (taskInfo.isSupportRange() && connectInfo.getDownSize() + size > connectInfo.getTotalSize()) {
+                size = (int) (connectInfo.getTotalSize() - connectInfo.getDownSize());
+              }
+              fileChannel.write(byteBuf.nioBuffer());
+              synchronized (chunkInfo) {
+                chunkInfo.setDownSize(chunkInfo.getDownSize() + size);
+                connectInfo.setDownSize(connectInfo.getDownSize() + size);
+              }
+              if (bootstrap.getHttpDownInfo().getSpeedLimit() > 0) {
+                long time = System.nanoTime();
+                if (taskInfo.getLastStartTime() <= 0) {
+                  taskInfo.setLastStartTime(time);
+                } else {
+                  //计算平均速度是否超过速度限制
+                  long useTime = time - taskInfo.getLastStartTime();
+                  double speed = taskInfo.getDownSize() / (double) useTime;
+                  double limitSpeed = bootstrap.getHttpDownInfo().getSpeedLimit() / TIME_1S_NANO;
+                  long sleepTime = (long) ((speed - limitSpeed) * useTime);
+                  if (sleepTime > 0) {
+                    TimeUnit.NANOSECONDS.sleep(sleepTime);
+                    //刷新其他连接的lastReadTime
+                    for (ConnectInfo ci : taskInfo.getConnectInfoList()) {
+                      if (ci.getConnectChannel() != null && ci.getConnectChannel() != ch) {
+                        DownTimeoutHandler downTimeout = (DownTimeoutHandler) ci.getConnectChannel().pipeline().get("downTimeout");
+                        if (downTimeout != null) {
+                          downTimeout.updateLastReadTime(sleepTime);
+                        }
+                      }
                     }
                   }
                 }
               }
-            }
-            if (!taskInfo.isSupportRange() && !(httpContent instanceof LastHttpContent)) {
-              return;
-            }
-            if (connectInfo.getDownSize() >= connectInfo.getTotalSize()) {
-              LOGGER.debug("连接下载完成：" + connectInfo + "\t" + chunkInfo);
-              normalClose = true;
-              bootstrap.close(connectInfo);
-              //判断分段是否下载完成
-              if (isChunkDownDone(httpContent)) {
-                LOGGER.debug("分段下载完成：" + connectInfo + "\t" + chunkInfo);
-                //计算最后平均下载速度
-                chunkInfo.setSpeed(calcSpeed(chunkInfo.getTotalSize(), time - chunkInfo.getStartTime()));
-                //分段下载完成回调
-                chunkInfo.setStatus(HttpDownStatus.DONE);
-                if (callback != null) {
-                  callback.onChunkDone(bootstrap.getHttpDownInfo(), chunkInfo);
-                }
-                //所有分段都下载完成
-                if (taskInfo.getChunkInfoList().stream().allMatch((chunk) -> chunk.getStatus() == HttpDownStatus.DONE)) {
-                  if (!taskInfo.isSupportRange()) {  //chunked编码最后更新文件大小
-                    taskInfo.setTotalSize(taskInfo.getDownSize());
-                    taskInfo.getChunkInfoList().get(0).setTotalSize(taskInfo.getDownSize());
+              if (!taskInfo.isSupportRange() && !(httpContent instanceof LastHttpContent)) {
+                return;
+              }
+              long time = System.currentTimeMillis();
+              if (connectInfo.getDownSize() >= connectInfo.getTotalSize()) {
+                LOGGER.debug("连接下载完成：" + connectInfo + "\t" + chunkInfo);
+                normalClose = true;
+                bootstrap.close(connectInfo);
+                //判断分段是否下载完成
+                if (isChunkDownDone(httpContent)) {
+                  LOGGER.debug("分段下载完成：" + connectInfo + "\t" + chunkInfo);
+                  synchronized (chunkInfo) {
+                    chunkInfo.setStatus(HttpDownStatus.DONE);
+                    //计算最后平均下载速度
+                    chunkInfo.setSpeed(calcSpeed(chunkInfo.getTotalSize(), time - taskInfo.getStartTime() - chunkInfo.getPauseTime()));
                   }
-                  //文件下载完成回调
-                  taskInfo.setStatus(HttpDownStatus.DONE);
-                  LOGGER.debug("任务下载完成：" + chunkInfo);
-                  bootstrap.done();
+                  //分段下载完成回调
                   if (callback != null) {
-                    callback.onDone(bootstrap.getHttpDownInfo());
+                    callback.onChunkDone(bootstrap.getHttpDownInfo(), chunkInfo);
                   }
+                  //所有分段都下载完成
+                  if (taskInfo.getChunkInfoList().stream().allMatch((chunk) -> chunk.getStatus() == HttpDownStatus.DONE)) {
+                    if (!taskInfo.isSupportRange()) {  //chunked编码最后更新文件大小
+                      taskInfo.setTotalSize(taskInfo.getDownSize());
+                      taskInfo.getChunkInfoList().get(0).setTotalSize(taskInfo.getDownSize());
+                    }
+                    //文件下载完成回调
+                    LOGGER.debug("任务下载完成：" + chunkInfo);
+                    connectInfo.setStatus(HttpDownStatus.DONE);
+                    taskInfo.setStatus(HttpDownStatus.DONE);
+                    //计算平均速度
+                    taskInfo.setSpeed(calcSpeed(taskInfo.getTotalSize(), System.currentTimeMillis() - taskInfo.getStartTime()));
+                    bootstrap.done();
+                    return;
+                  }
+                }
+                //判断是否要去支持其他分段,找一个下载最慢的分段
+                ChunkInfo supportChunk = taskInfo.getChunkInfoList()
+                    .stream()
+                    .filter(chunk -> chunk.getIndex() != connectInfo.getChunkIndex() && chunk.getStatus() != HttpDownStatus.DONE)
+                    .min(Comparator.comparingLong(ChunkInfo::getDownSize))
+                    .orElse(null);
+                if (supportChunk == null) {
+                  connectInfo.setStatus(HttpDownStatus.DONE);
                   return;
                 }
+                ConnectInfo maxConnect = taskInfo.getConnectInfoList()
+                    .stream()
+                    .filter(connect -> connect.getChunkIndex() == supportChunk.getIndex() && connect.getTotalSize() - connect.getDownSize() >= SIZE_1MB)
+                    .max((c1, c2) -> (int) (c1.getStartPosition() - c2.getStartPosition()))
+                    .orElse(null);
+                if (maxConnect == null) {
+                  connectInfo.setStatus(HttpDownStatus.DONE);
+                  return;
+                }
+                //把这个分段最后一个下载连接分成两个
+                long remainingSize = maxConnect.getTotalSize() - maxConnect.getDownSize();
+                long endTemp = maxConnect.getEndPosition();
+                maxConnect.setEndPosition(maxConnect.getEndPosition() - (remainingSize / 2));
+                //给当前连接重新分配下载区间
+                connectInfo.setStartPosition(maxConnect.getEndPosition() + 1);
+                connectInfo.setEndPosition(endTemp);
+                connectInfo.setChunkIndex(supportChunk.getIndex());
+                LOGGER.debug("支持下载：" + connectInfo + "\t" + chunkInfo);
+                bootstrap.reConnect(connectInfo, true);
               }
-              //判断是否要去支持其他分段,找一个下载最慢的分段
-              ChunkInfo supportChunk = taskInfo.getChunkInfoList()
-                  .stream()
-                  .filter(chunk -> chunk.getIndex() != connectInfo.getChunkIndex() && chunk.getStatus() != HttpDownStatus.DONE)
-                  .min(Comparator.comparingLong(ChunkInfo::getDownSize))
-                  .orElse(null);
-              if (supportChunk == null) {
-                return;
-              }
-              ConnectInfo maxConnect = taskInfo.getConnectInfoList()
-                  .stream()
-                  .filter(connect -> connect.getChunkIndex() == supportChunk.getIndex() && connect.getTotalSize() - connect.getDownSize() >= SIZE_1MB)
-                  .max((c1, c2) -> (int) (c1.getStartPosition() - c2.getStartPosition()))
-                  .orElse(null);
-              if (maxConnect == null) {
-                return;
-              }
-              //把这个分段最后一个下载连接分成两个
-              long remainingSize = maxConnect.getTotalSize() - maxConnect.getDownSize();
-              long endTemp = maxConnect.getEndPosition();
-              maxConnect.setEndPosition(maxConnect.getEndPosition() - (remainingSize / 2));
-              //给当前连接重新分配下载区间
-              connectInfo.setStartPosition(maxConnect.getEndPosition() + 1);
-              connectInfo.setEndPosition(endTemp);
-              connectInfo.setChunkIndex(supportChunk.getIndex());
-              LOGGER.debug("支持下载：" + connectInfo + "\t" + chunkInfo);
-              bootstrap.reConnect(connectInfo, true);
             }
           } else {
             HttpResponse httpResponse = (HttpResponse) msg;
@@ -193,7 +191,7 @@ public class HttpDownInitializer extends ChannelInitializer {
               return;
             }
             LOGGER.debug("下载响应：" + connectInfo);
-            fileChannel = Files.newByteChannel(Paths.get(taskInfo.buildTaskFilePath()), StandardOpenOption.WRITE);
+            fileChannel = Files.newByteChannel(Paths.get(HttpDownUtil.getTaskFilePath(taskInfo)), StandardOpenOption.WRITE);
             if (taskInfo.isSupportRange()) {
               fileChannel.position(connectInfo.getStartPosition() + connectInfo.getDownSize());
             }
@@ -225,7 +223,7 @@ public class HttpDownInitializer extends ChannelInitializer {
        * @return
        */
       private long calcSpeed(long downSize, long downTime) {
-        return downSize / (downTime / 1000);
+        return (long) (downSize / (downTime / 1000D));
       }
 
       @Override
@@ -242,10 +240,10 @@ public class HttpDownInitializer extends ChannelInitializer {
       @Override
       public void channelUnregistered(ChannelHandlerContext ctx) throws Exception {
         super.channelUnregistered(ctx);
-        bootstrap.close(connectInfo);
         //还未下载完成，继续下载
-        if (!normalClose) {
+        if (!normalClose && chunkInfo.getStatus() != HttpDownStatus.PAUSE) {
           LOGGER.debug("channelUnregistered:" + connectInfo + "\t" + chunkInfo);
+          bootstrap.close(connectInfo);
           bootstrap.reConnect(connectInfo);
         }
       }
